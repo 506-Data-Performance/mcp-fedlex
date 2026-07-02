@@ -62,22 +62,107 @@ pub struct ParsedRef {
     pub kind: RefKind,
     /// Extrahierter Wert (Artikelnummer, SR-Nummer, AS-Fundstelle).
     pub value: String,
+    /// Artikelnummer bei [`RefKind::Article`] (`"58"`, `"9a"`), 68 §C-6.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub article: Option<String>,
+    /// Absatznummer, sofern erkennbar (`"1"`, `"2bis"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paragraph: Option<String>,
+    /// Erlass-Kürzel am Verweis-Ende (`"ParlG"`, `"EnG"`) — Brücke zu
+    /// `search_law`, sofern vorhanden.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub act_abbreviation: Option<String>,
+    /// eId-Kandidat im Korpus-Format (`art_58/para_1`) — Brücke zu
+    /// `read_element`. Kandidat, kein Beleg.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eid_candidate: Option<String>,
+}
+
+impl ParsedRef {
+    /// Verweis ohne strukturierte Zerlegung (SR/AS/Unknown).
+    fn plain(kind: RefKind, value: String) -> Self {
+        ParsedRef {
+            kind,
+            value,
+            article: None,
+            paragraph: None,
+            act_abbreviation: None,
+            eid_candidate: None,
+        }
+    }
+}
+
+/// Artikelnummern-Form: beginnt mit Ziffer, dann alphanumerisch (`58`, `9a`).
+fn is_article_number(s: &str) -> bool {
+    s.chars().next().is_some_and(|c| c.is_ascii_digit())
+        && s.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Zerlegt den Artikel-Verweis strukturiert (68 §C-6): «58 Abs. 1 ParlG» →
+/// Artikel 58, Absatz 1, Kürzel «ParlG», eId-Kandidat `art_58/para_1`.
+/// Konservativ — was nicht sicher erkennbar ist, bleibt `None`; `value`
+/// trägt weiterhin den Rohtext.
+fn parse_article_ref(value: String) -> ParsedRef {
+    let tokens: Vec<&str> = value.split_whitespace().collect();
+    let strip = |s: &str| s.trim_end_matches([',', ';', '.']).to_string();
+
+    let article = tokens
+        .first()
+        .map(|t| strip(t))
+        .filter(|t| is_article_number(t));
+
+    let mut paragraph = None;
+    for (i, tok) in tokens.iter().enumerate() {
+        if matches!(*tok, "Abs." | "Absatz")
+            && let Some(next) = tokens.get(i + 1)
+        {
+            let p = strip(next);
+            if p.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                paragraph = Some(p);
+                break;
+            }
+        }
+    }
+
+    // Kürzel: letztes Token, beginnt mit Grossbuchstabe, rein alphanumerisch
+    // (ParlG, EnG, BV) — nie das Artikel-Token selbst.
+    let act_abbreviation = (tokens.len() >= 2)
+        .then(|| tokens.last().map(|t| strip(t)))
+        .flatten()
+        .filter(|t| {
+            t.chars().next().is_some_and(char::is_uppercase) && t.chars().all(char::is_alphanumeric)
+        });
+
+    let eid_candidate = article.as_ref().map(|a| {
+        let base = format!("art_{}", a.to_lowercase());
+        match &paragraph {
+            Some(p) => format!("{base}/para_{}", p.to_lowercase()),
+            None => base,
+        }
+    });
+
+    ParsedRef {
+        kind: RefKind::Article,
+        value,
+        article,
+        paragraph,
+        act_abbreviation,
+        eid_candidate,
+    }
 }
 
 /// AKN-REF-02: Klassifiziert die 15 % href-losen Verweis-Labels (X11.2)
-/// per Heuristik. Reine Textanalyse, bewusst konservativ — was nicht
-/// sicher erkennbar ist, bleibt `Unknown` statt falsch verlinkt.
+/// per Heuristik und zerlegt Artikel-Verweise strukturiert (68 §C-6).
+/// Reine Textanalyse, bewusst konservativ — was nicht sicher erkennbar
+/// ist, bleibt `Unknown` bzw. `None` statt falsch verlinkt.
 pub fn parse_unlinked_ref(label: &str) -> ParsedRef {
     let t = label.trim();
-    // Artikel-Verweise: "Art. 9a", "Artikel 7 Absatz 2".
+    // Artikel-Verweise: "Art. 9a", "Artikel 7 Absatz 2", "Art. 58 Abs. 1 ParlG".
     for prefix in ["Art.", "Artikel"] {
         if let Some(rest) = t.strip_prefix(prefix) {
             let value = rest.trim().to_string();
             if !value.is_empty() {
-                return ParsedRef {
-                    kind: RefKind::Article,
-                    value,
-                };
+                return parse_article_ref(value);
             }
         }
     }
@@ -85,10 +170,7 @@ pub fn parse_unlinked_ref(label: &str) -> ParsedRef {
     if let Some(rest) = t.strip_prefix("AS ") {
         let rest = rest.trim();
         if rest.len() >= 4 && rest[..4].chars().all(|c| c.is_ascii_digit()) {
-            return ParsedRef {
-                kind: RefKind::AsCitation,
-                value: rest.to_string(),
-            };
+            return ParsedRef::plain(RefKind::AsCitation, rest.to_string());
         }
     }
     // SR-Nummern: nur Ziffern und Punkte ("101", "0.814.01").
@@ -96,15 +178,9 @@ pub fn parse_unlinked_ref(label: &str) -> ParsedRef {
         && t.chars().all(|c| c.is_ascii_digit() || c == '.')
         && t.chars().any(|c| c.is_ascii_digit())
     {
-        return ParsedRef {
-            kind: RefKind::SrNumber,
-            value: t.to_string(),
-        };
+        return ParsedRef::plain(RefKind::SrNumber, t.to_string());
     }
-    ParsedRef {
-        kind: RefKind::Unknown,
-        value: t.to_string(),
-    }
+    ParsedRef::plain(RefKind::Unknown, t.to_string())
 }
 
 #[cfg(test)]
@@ -137,28 +213,50 @@ mod tests {
             parse_unlinked_ref("Art. 9a"),
             ParsedRef {
                 kind: RefKind::Article,
-                value: "9a".into()
+                value: "9a".into(),
+                article: Some("9a".into()),
+                paragraph: None,
+                act_abbreviation: None,
+                eid_candidate: Some("art_9a".into()),
             }
         );
         assert_eq!(
             parse_unlinked_ref("Artikel 7 Absatz 2").kind,
             RefKind::Article
         );
-        assert_eq!(
-            parse_unlinked_ref("101"),
-            ParsedRef {
-                kind: RefKind::SrNumber,
-                value: "101".into()
-            }
-        );
+        assert_eq!(parse_unlinked_ref("101").kind, RefKind::SrNumber);
+        assert_eq!(parse_unlinked_ref("101").value, "101");
         assert_eq!(parse_unlinked_ref("0.814.01").kind, RefKind::SrNumber);
-        assert_eq!(
-            parse_unlinked_ref("AS 2020 752"),
-            ParsedRef {
-                kind: RefKind::AsCitation,
-                value: "2020 752".into()
-            }
-        );
+        assert_eq!(parse_unlinked_ref("AS 2020 752").kind, RefKind::AsCitation);
+        assert_eq!(parse_unlinked_ref("AS 2020 752").value, "2020 752");
         assert_eq!(parse_unlinked_ref("siehe oben").kind, RefKind::Unknown);
+    }
+
+    /// 68 §C-6: «Art. 58 Abs. 1 ParlG» wird strukturiert zerlegt — vorher
+    /// bekam der Agent nur {Article, "58 Abs. 1 ParlG"} und musste selbst
+    /// weiterparsen. eid_candidate ist die Brücke zu read_element,
+    /// act_abbreviation die zu search_law.
+    #[test]
+    fn article_refs_decompose_into_reusable_parts() {
+        let p = parse_unlinked_ref("Art. 58 Abs. 1 ParlG");
+        assert_eq!(p.kind, RefKind::Article);
+        assert_eq!(p.article.as_deref(), Some("58"));
+        assert_eq!(p.paragraph.as_deref(), Some("1"));
+        assert_eq!(p.act_abbreviation.as_deref(), Some("ParlG"));
+        assert_eq!(p.eid_candidate.as_deref(), Some("art_58/para_1"));
+
+        // "Artikel"-Langform mit Absatz, ohne Kürzel.
+        let p = parse_unlinked_ref("Artikel 7 Absatz 2");
+        assert_eq!(p.article.as_deref(), Some("7"));
+        assert_eq!(p.paragraph.as_deref(), Some("2"));
+        assert_eq!(p.act_abbreviation, None, "Ziffer ist kein Kürzel");
+        assert_eq!(p.eid_candidate.as_deref(), Some("art_7/para_2"));
+
+        // Konservativ: Aufzählung («Art. 5, 7, 12») liefert nur den ersten
+        // Artikel strukturiert, der Rohtext bleibt vollständig in value.
+        let p = parse_unlinked_ref("Art. 5, 7, 12");
+        assert_eq!(p.article.as_deref(), Some("5"));
+        assert_eq!(p.value, "5, 7, 12");
+        assert_eq!(p.paragraph, None);
     }
 }

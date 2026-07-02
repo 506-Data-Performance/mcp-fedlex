@@ -33,6 +33,13 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **`parse_unlinked_ref` zerlegt strukturiert (68 §C-6):** «Art. 58 Abs. 1
+  ParlG» liefert jetzt `article: "58"`, `paragraph: "1"`,
+  `act_abbreviation: "ParlG"` und `eid_candidate: "art_58/para_1"` — die
+  direkten Brücken zu `read_element` (eid) und `search_law` (Kürzel).
+  Vorher bekam der Agent nur `{Article, "58 Abs. 1 ParlG"}` und musste
+  selbst weiterparsen — genau die Arbeit, die das Tool abnehmen soll.
+  Konservativ: Unsicheres bleibt `None`, der Rohtext immer in `value`.
 - **Geltungs-Flag in den Such-Treffern (68 §C-5):** `search_law`- und
   `resolve_sr_number`-Treffer tragen `in_force` (abgeleitet aus
   `jolux:inForceStatus`; fehlt der Status, ehrlich `null` → `check_in_force`

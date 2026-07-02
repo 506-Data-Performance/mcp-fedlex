@@ -853,7 +853,7 @@ impl McpTool for ParseUnlinkedRef {
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Parst einen unverlinkten Verweis-Text (AKN-REF-02), z.B. 'Art. 9a' oder 'SR 730.0', in eine strukturierte Form. Reiner Parser, KEIN Beleg: das Ergebnis ist ein HINWEIS (kind=hint) — belege es anschliessend mit read_article/get_metadata.",
+            "description": "Parst einen unverlinkten Verweis-Text (AKN-REF-02), z.B. 'Art. 58 Abs. 1 ParlG', strukturiert: article/paragraph/act_abbreviation plus eid_candidate (direkt fuer read_element; das Kuerzel fuer search_law). Reiner Parser, KEIN Beleg: das Ergebnis ist ein HINWEIS (kind=hint) — belege es anschliessend mit read_article/get_metadata.",
             "properties": {
                 "label": { "type": "string", "description": "Der Verweis-Text, z.B. 'Artikel 7 Absatz 2'" }
             },
@@ -1321,6 +1321,9 @@ mod tests {
             result["data"].is_object() || result["data"].is_string(),
             "geparster Verweis fehlt: {result}"
         );
+        // 68 §C-6: strukturierte Zerlegung erreicht die Tool-Antwort.
+        assert_eq!(result["data"]["article"], "9a");
+        assert_eq!(result["data"]["eid_candidate"], "art_9a");
     }
 
     /// ADR-010-Abnahme: `extract_change_notes` läuft über den Fetcher und
