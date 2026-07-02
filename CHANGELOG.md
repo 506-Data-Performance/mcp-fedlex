@@ -33,6 +33,14 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Geltungs-Flag in den Such-Treffern (68 §C-5):** `search_law`- und
+  `resolve_sr_number`-Treffer tragen `in_force` (abgeleitet aus
+  `jolux:inForceStatus`; fehlt der Status, ehrlich `null` → `check_in_force`
+  entscheidet über die Datumsfelder). `search_law` sortiert geltendes Recht
+  zuerst — live stand das **aufgehobene** EnG 1998 vor dem geltenden EnG 2016
+  (beide SR 730.0), die klassische Agenten-Falsch-Wahl. Die redundante
+  Per-Hit-Provenance (N identische Stempel pro Antwort) entfällt; die
+  Antwort-Hülle trägt die Hinweis-Provenance.
 - **`list_vocabulary` findbar gemacht (68 §C-2):** Neuer `query`-Parameter
   filtert serverseitig case-insensitiv über die Labels aller Sprachen
   (`scheme_id=country, query=Deutschland` → 1 Treffer statt Liste blättern

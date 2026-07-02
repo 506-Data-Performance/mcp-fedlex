@@ -15,6 +15,11 @@ pub struct SrHit {
     pub title: Option<String>,
     /// `jolux:inForceStatus` (opake Vokabular-URI), sofern vorhanden.
     pub in_force_status: Option<String>,
+    /// Abgeleitete Geltung (68 §C-5): `Some(true)` = in Kraft — das
+    /// Disambiguierungs-Kriterium bei wiederverwendeten SR-Nummern, direkt
+    /// als Flag statt als zu deutende URI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_force: Option<bool>,
 }
 
 const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status WHERE {
@@ -59,6 +64,7 @@ pub async fn resolve_sr_number(
             Some(SrHit {
                 eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
                 title: val(b, "title").map(str::to_string),
+                in_force: crate::search::derive_in_force(val(b, "status")),
                 in_force_status: val(b, "status").map(str::to_string),
             })
         })

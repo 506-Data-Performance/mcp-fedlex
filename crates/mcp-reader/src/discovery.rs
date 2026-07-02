@@ -14,12 +14,12 @@
 //! (`syllogismus-fedlex`/`ansV`) kann einen Hinweis nicht versehentlich als
 //! Beleg verbuchen, weil der Typ es ausweist.
 //!
-//! **Pro Treffer eine Provenance** (ADR-004 „Listen/Aggregate", ADR-006): jeder
-//! Treffer trägt im `data` seine eigene Hinweis-Provenance, gebildet aus dem
-//! Anfrage-Stempel und dem **Treffer-ELI**. Die Hülle der `Response` trägt
-//! zusätzlich eine Hinweis-Provenance auf die **Anfrage selbst** (sentinel-ELI
-//! der Suchgattung), damit das Provenance-Gate auch bei null Treffern erfüllt
-//! ist, ohne einen Treffer vorzutäuschen.
+//! Die Hülle der `Response` trägt eine Hinweis-Provenance auf die **Anfrage
+//! selbst** (Sentinel-ELI der Suchgattung), damit das Provenance-Gate auch bei
+//! null Treffern erfüllt ist, ohne einen Treffer vorzutäuschen. Die Treffer
+//! selbst tragen nur ihr `eli` — eine Per-Hit-Provenance wäre N-fach derselbe
+//! Stempel (68 §C-5); verbindlich wird ein Kandidat erst durch einen
+//! Norm-Beleg (ADR-006).
 
 use crate::registry::Registry;
 use crate::tool::{McpTool, ToolContext, ToolError, ToolPool};
@@ -148,22 +148,11 @@ fn query_hint(ctx: &ToolContext, gattung: &str) -> Result<Provenance, ToolError>
     Ok(ctx.stamp.into_hint_provenance(eli))
 }
 
-/// Hängt an einen Treffer (mit Feld `eli`) seine eigene Hinweis-Provenance an.
-///
-/// Schlägt der ELI eines Treffers fehl (sollte nicht vorkommen, jeder Treffer
-/// trägt laut Primitiv ein gültiges relatives ELI), wird der Treffer ohne
-/// Provenance-Block durchgereicht statt den ganzen Call zu kippen.
-fn annotate_hit(ctx: &ToolContext, mut hit: Value) -> Value {
-    if let Some(eli_str) = hit.get("eli").and_then(Value::as_str)
-        && let Ok(eli) = Eli::new(eli_str)
-    {
-        let prov = ctx.stamp.into_hint_provenance(eli);
-        if let (Some(obj), Ok(prov_val)) = (hit.as_object_mut(), to_value(prov)) {
-            obj.insert("provenance".into(), prov_val);
-        }
-    }
-    hit
-}
+// 68 §C-5: Die frühere Per-Hit-Provenance (`annotate_hit`) ist entfernt —
+// zwanzig identische Stempel pro Antwort waren reine Token-Redundanz. Die
+// Top-Level-Hinweis-Provenance der Antwort plus das `eli`-Feld jedes Treffers
+// tragen dieselbe Information; verbindlich wird ein Kandidat ohnehin erst
+// durch einen Norm-Beleg (ADR-006).
 
 // ---------------------------------------------------------------------------
 // Die Tools
@@ -188,7 +177,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Sucht Bundeserlasse nach Titel/Stichwort (Discovery, JLX-RES-02). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg. Belege die Treffer anschliessend mit get_metadata/read_article.",
+            "description": "Sucht Bundeserlasse nach Titel/Stichwort (Discovery, JLX-RES-02). Treffer tragen in_force (geltendes Recht steht zuerst; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
             "properties": {
                 "query": { "type": "string", "description": "Titel-Stichwort, z.B. Energiegesetz" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 },
@@ -204,11 +193,7 @@ where
         let hits = search_law(self.client.as_ref(), query, lang, limit)
             .await
             .map_err(map_jolux)?;
-        let annotated: Vec<Value> = hits
-            .into_iter()
-            .filter_map(|h| to_value(h).ok())
-            .map(|h| annotate_hit(ctx, h))
-            .collect();
+        let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
         Ok(Response::new(capped_list("hits", annotated, limit), prov))
     }
@@ -247,11 +232,7 @@ where
         let hits = resolve_sr_number(self.client.as_ref(), sr, lang)
             .await
             .map_err(map_jolux)?;
-        let annotated: Vec<Value> = hits
-            .into_iter()
-            .filter_map(|h| to_value(h).ok())
-            .map(|h| annotate_hit(ctx, h))
-            .collect();
+        let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
         Ok(Response::new(json!({ "hits": annotated }), prov))
     }
@@ -291,11 +272,7 @@ where
         let hits = find_related_by_topic(self.client.as_ref(), &eli, limit)
             .await
             .map_err(map_jolux)?;
-        let annotated: Vec<Value> = hits
-            .into_iter()
-            .filter_map(|h| to_value(h).ok())
-            .map(|h| annotate_hit(ctx, h))
-            .collect();
+        let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         // Bezug der Anfrage ist der Ausgangs-ELI selbst (existiert garantiert).
         let prov = ctx.stamp.into_hint_provenance(eli);
         Ok(Response::new(capped_list("hits", annotated, limit), prov))
@@ -714,10 +691,9 @@ mod tests {
         let hits = out["data"]["hits"].as_array().expect("hits-Array");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0]["eli"], "eli/cc/2017/762");
-        // ADR-006: jeder Treffer trägt eine HINWEIS-Provenance, kein Beleg.
-        assert_eq!(hits[0]["provenance"]["kind"], "hint");
-        assert_eq!(hits[0]["provenance"]["eli"], "eli/cc/2017/762");
-        // Die Hülle selbst weist sich ebenfalls als Hinweis aus.
+        // 68 §C-5: Per-Hit-Provenance entfernt (Token-Redundanz) — die
+        // Antwort-Hülle weist sich als Hinweis aus, der Treffer trägt eli.
+        assert!(hits[0].get("provenance").is_none());
         assert_eq!(out["provenance"]["kind"], "hint");
     }
 
@@ -733,12 +709,12 @@ mod tests {
             .await;
         let hits = out["data"]["hits"].as_array().expect("hits-Array");
         assert_eq!(hits.len(), 2, "SR-Nummern werden wiederverwendet: {out}");
-        // Beide Kandidaten tragen Hinweis-Provenance auf ihr eigenes ELI.
-        assert_eq!(hits[0]["provenance"]["kind"], "hint");
-        assert_eq!(hits[1]["provenance"]["kind"], "hint");
         let elis: Vec<&str> = hits.iter().map(|h| h["eli"].as_str().unwrap()).collect();
         assert!(elis.contains(&"eli/cc/2017/762"));
         assert!(elis.contains(&"eli/cc/1999/27"));
+        // 68 §C-5: Disambiguierung direkt als Flag — enforcement-status/0 → true.
+        let eng2016 = hits.iter().find(|h| h["eli"] == "eli/cc/2017/762").unwrap();
+        assert_eq!(eng2016["in_force"], true, "{out}");
     }
 
     #[tokio::test]
