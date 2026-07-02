@@ -1,5 +1,10 @@
 # 50 — Fahrplan zum „perfekten" MCP-Server
 
+> **Abgeschlossen (Stand 2026-07-02):** Alle Schritte 1–6 sind umgesetzt (Schritt 5/6
+> via [60 Block D](60_OPEN_ITEMS_AND_USABILITY.md); Zahlen von damals — „22 Tools" —
+> sind überholt: heute 25 Tools / 24+23-Matrix). **Nachfolger dieses Fahrplans ist
+> [67_HARDENING_AND_SOTA_ROADMAP.md](67_HARDENING_AND_SOTA_ROADMAP.md).**
+
 > **Was dieses Dokument ist.** Eine priorisierte Roadmap auf Basis der am Code verifizierten
 > [45_GAP_ANALYSIS.md](45_GAP_ANALYSIS.md). Es trifft keine neuen Architekturentscheidungen (die
 > stehen in den ADRs), sondern ordnet die **belegten** offenen Punkte nach Hebelwirkung und

@@ -1,5 +1,12 @@
 # 55 — Migrations-Runbook: MCP-Protokoll-Upgrade (extrem vorsichtig)
 
+> **Stand 2026-07-02 (67 §T-3, nachgeführt):** Die Migration ist **abgeschlossen** —
+> `POST /mcp` live, Default `2025-11-25`, `v0.2.0` getaggt (ADR-008 „Accepted").
+> Unten noch offene Checkboxen sind entweder durch den additiven Weg obsolet
+> (Konsumenten blieben auf `/rpc`, der Server blieb rückwärtskompatibel) oder laufen
+> bewusst weiter: **4.2** (OAuth-Discovery-Dokumente) → [67 §P-3](67_HARDENING_AND_SOTA_ROADMAP.md);
+> **Phase 9** (Legacy-`schema`-Entfernung) wartet auf die Konsumenten-Umstellung.
+
 > **Zweck.** Schritt-für-Schritt-Ausführungsplan, um `mcp-fedlex` **ohne Bruch** von der heute
 > ausgehandelten Protokollrevision `2024-11-05` auf die aktuelle MCP-Spec zu heben. Dieses Dokument
 > ist die **operative Ergänzung** zur Entscheidung in
@@ -225,7 +232,7 @@ parallel gepflegt. Ein kurzer Übergang, in dem der alte Pfad noch antwortet, is
       > `cargo test -p mcp-reader` → **141 unit + 6 baseline + 1 lexicon** grün. Die Verdrahtung in
       > den Request-Pfad folgt erst mit dem Streamable-HTTP-Endpoint (3.2 Rest) + 3.4.
 
-- [ ] **3.2 Neuen Transport implementieren (Streamable HTTP).** Neuer Endpoint/Modus. Der alte
+- [x] **3.2 Neuen Transport implementieren (Streamable HTTP).** Neuer Endpoint/Modus. Der alte
       `/rpc`-Pfad bleibt **nur übergangsweise** erreichbar, **bis beide Clients (Phase 7) umgestellt
       sind** — er ist kein Dauerzustand, sondern wird in Phase 9 entfernt. Ziel ist der neue
       Transport als **einziger** Pfad.
@@ -242,10 +249,10 @@ parallel gepflegt. Ein kurzer Übergang, in dem der alte Pfad noch antwortet, is
       > Gesamtlauf `cargo test -p mcp-reader` → **136 unit + 6 baseline + 1 lexicon** grün.
       > Damit ist die Signatur bereit für die Status-Codes/No-Body-Pfade der nächsten Schritte,
       > **ohne** erneuten Signatur-Umbau.
-- [ ] **3.3 Health unberührt.** `/livez` `/readyz` `/startupz` bleiben wie sind (`health.rs`).
-- [ ] **3.4 Doppelpfad-Tests.** Beide Transporte gegen denselben Tool-Aufruf; identische
+- [x] **3.3 Health unberührt.** `/livez` `/readyz` `/startupz` bleiben wie sind (`health.rs`).
+- [x] **3.4 Doppelpfad-Tests.** Beide Transporte gegen denselben Tool-Aufruf; identische
       `provenance`-Ausgabe. Snapshot 1.2 muss auf beiden Wegen passen.
-- [ ] **3.5 Lasttest/Quota.** Sicherstellen, dass der neue Pfad dieselbe Quota-/Auth-Kette
+- [x] **3.5 Lasttest/Quota.** Sicherstellen, dass der neue Pfad dieselbe Quota-/Auth-Kette
       durchläuft (ADR-002), kein Bypass.
 
 **Gate 3:** Beide Transporte grün, identische Antworten, kein Auth-/Quota-Bypass.
@@ -300,7 +307,7 @@ abgleichen, **ohne** fail-closed aufzuweichen.
 
 - [ ] **4.2 Additiv ergänzen.** Fehlende Pflicht-Header/Discovery-Dokumente bereitstellen;
       bestehende JWT/JWKS-Kette (ADR-002) bleibt gültig.
-- [ ] **4.3 Negativtests.** Fehlendes/abgelaufenes/falsches Token weiterhin hart abgelehnt;
+- [x] **4.3 Negativtests.** Fehlendes/abgelaufenes/falsches Token weiterhin hart abgelehnt;
       Identität nie aus Params (ADR-002-Invariante als Test).
 
 **Gate 4:** Auth-Konformität nachgewiesen; alle fail-closed-Negativtests grün.

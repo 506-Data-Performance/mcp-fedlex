@@ -1,5 +1,11 @@
 # Implementierungs-Briefing — Vollständigkeits-Matrix (Roadmap Schritt 3 / ADR-007 letztes Kriterium)
 
+> **Stand-Hinweis 2026-07-02 (67 §T-3):** Dieses Briefing beschreibt den
+> Planungsstand **vor** D-4 (21 projiziert / 26 ausgeschlossen / 22 Tools).
+> Seit 2026-06-21 gilt **24 / 23 / 25** (`extract_tables`, `list_components`,
+> `detect_foreign_content` projiziert). Maßgeblich ist der Test
+> `crates/mcp-reader/tests/lexicon_projection.rs`, nicht dieses Dokument.
+
 > **Zweck.** Schliesst den letzten offenen Punkt aus `45_GAP_ANALYSIS.md` (G-4) und das letzte
 > offene Akzeptanzkriterium in `adr/ADR-007-…md` (Z. 108–110): einen **Offline-CI-Test**, der
 > garantiert, dass **jedes** im Lexikon dokumentierte Primitiv genau einem Zustand zugeordnet ist:

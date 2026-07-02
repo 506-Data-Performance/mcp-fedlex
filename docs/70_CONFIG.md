@@ -52,13 +52,13 @@ Start hart ab.**
 Der `initialize`-Handshake handelt die MCP-Protokollversion aus. Nennt der Client eine
 **unterstützte** Version, wird diese ausgehandelt; nennt er **keine** (heutiger ansV-Fall), gilt die
 Default-Version; nennt er eine **unbekannte/zu neue**, antwortet der Reader spec-konform mit seiner
-höchsten unterstützten (kein harter Fehler). Heute wird nur `2024-11-05` unterstützt — der Sprung
-auf eine neuere Revision erfolgt kontrolliert nach dem Migrations-Runbook
-(`docs/55_MIGRATION_mcp_protocol_upgrade.md`).
+höchsten unterstützten (kein harter Fehler). Unterstützt sind `2025-11-25` (Default, live seit
+2026-06-20) und `2024-11-05` (Legacy, nur auf explizite Anfrage) — Migration abgeschlossen,
+s. `docs/55_MIGRATION_mcp_protocol_upgrade.md` und ADR-008.
 
 | Variable | Pflicht | Default | Beschreibung |
 | --- | --- | --- | --- |
-| `MCP_PROTOCOL_DEFAULT` | nein | `2024-11-05` | Ausgehandelte Default-Version für Clients **ohne** `protocolVersion`. Wird **nur** akzeptiert, wenn der Wert in `SUPPORTED_PROTOCOL_VERSIONS` steht; sonst fail-safe auf die Kompilier-Default. Erlaubt den späteren Versionssprung als **Config-Flip ohne Redeploy** (Runbook Phase 6.2). |
+| `MCP_PROTOCOL_DEFAULT` | nein | `2025-11-25` | Ausgehandelte Default-Version für Clients **ohne** `protocolVersion`. Wird **nur** akzeptiert, wenn der Wert in `SUPPORTED_PROTOCOL_VERSIONS` steht; sonst fail-safe auf die Kompilier-Default. Erlaubt den späteren Versionssprung als **Config-Flip ohne Redeploy** (Runbook Phase 6.2). |
 
 ## 2. Authentifizierung
 

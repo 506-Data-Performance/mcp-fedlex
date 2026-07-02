@@ -1,6 +1,6 @@
 # ADR-008: MCP-Protokollversion — Upgrade & Versions-Negotiation
 
-- **Status:** Proposed — §A (Spec-Recherche) erledigt; §B/§C noch nicht umgesetzt
+- **Status:** Accepted — umgesetzt (§A/§B/§C); Default `2025-11-25` live seit 2026-06-20, `v0.2.0` getaggt am 2026-06-21. Nachgeführt 2026-07-02 (67 §T-3; das Register [65 RF-4](../65_REVIEW_FINDINGS.md) fand den veralteten Status).
 - **Datum:** 2026-06-20 (§A aktualisiert 2026-06-20)
 - **Kontext-Artefakt:** `crates/mcp-reader/src/transport.rs` (Handshake), `likec4/`
 - **Betrifft:** `mcp-fedlex` (Reader), alle MCP-Clients (Agenten, Claude Desktop, ansV,
