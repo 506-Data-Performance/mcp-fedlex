@@ -115,6 +115,10 @@ pub struct InForce {
     pub in_force: bool,
     /// `jolux:inForceStatus` (opake Vokabular-URI), sofern vorhanden.
     pub status_uri: Option<String>,
+    /// Deutsches Label des Status (z.B. «In Kraft», «Nicht mehr in Kraft»),
+    /// direkt in der Query gejoint (68 §C-1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_label: Option<String>,
     /// Inkrafttreten.
     pub date_entry_in_force: Option<String>,
     /// Ausserkrafttreten (deckt 96 % der Abgelaufenen, J3.2).
@@ -123,8 +127,9 @@ pub struct InForce {
     pub date_end_applicability: Option<String>,
 }
 
-const IN_FORCE_Q: &str = r#"SELECT ?status ?entry ?noLonger ?endApp WHERE {
-  OPTIONAL { <__URI__> jolux:inForceStatus ?status }
+const IN_FORCE_Q: &str = r#"SELECT ?status ?statusLabel ?entry ?noLonger ?endApp WHERE {
+  OPTIONAL { <__URI__> jolux:inForceStatus ?status
+    OPTIONAL { ?status skos:prefLabel ?statusLabel . FILTER(LANG(?statusLabel) = "de") } }
   OPTIONAL { <__URI__> jolux:dateEntryInForce ?entry }
   OPTIONAL { <__URI__> jolux:dateNoLongerInForce ?noLonger }
   OPTIONAL { <__URI__> jolux:dateEndApplicability ?endApp }
@@ -151,6 +156,9 @@ pub async fn check_in_force(
         .ok_or_else(|| JoluxError::NotFound(uri.clone()))?;
 
     let status_uri = val(b, "status").map(str::to_string);
+    let status_label = val(b, "statusLabel")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let entry = val(b, "entry").map(str::to_string);
     let no_longer = val(b, "noLonger").map(str::to_string);
     let end_app = val(b, "endApp").map(str::to_string);
@@ -172,6 +180,7 @@ pub async fn check_in_force(
     let data = InForce {
         in_force,
         status_uri,
+        status_label,
         date_entry_in_force: entry,
         date_no_longer_in_force: no_longer,
         date_end_applicability: end_app,
@@ -283,8 +292,9 @@ mod tests {
     #[tokio::test]
     async fn in_force_falls_back_to_status_without_dates() {
         let client = MockSparqlClient::from_json(
-            r#"{"head":{"vars":["status","entry","noLonger","endApp"]},"results":{"bindings":[{
-              "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"}
+            r#"{"head":{"vars":["status","statusLabel","entry","noLonger","endApp"]},"results":{"bindings":[{
+              "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"},
+              "statusLabel":{"type":"literal","xml:lang":"de","value":"In Kraft"}
             }]}}"#,
         );
         let eli = Eli::new("eli/cc/2017/762").unwrap();
@@ -292,5 +302,7 @@ mod tests {
             .await
             .unwrap();
         assert!(resp.data().in_force, "Fallback auf Status-Vokabular (J3.3)");
+        // 68 §C-1: Label direkt aus der Query — kein resolve_vocabulary_label nötig.
+        assert_eq!(resp.data().status_label.as_deref(), Some("In Kraft"));
     }
 }

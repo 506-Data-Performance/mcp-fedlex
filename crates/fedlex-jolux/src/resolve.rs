@@ -155,8 +155,11 @@ const EXPR_Q: &str = r#"SELECT DISTINCT ?lang WHERE {
 
 /// JLX-RES-05: Listet die Sprachen, in denen ein Erlass vorliegt.
 ///
-/// Liefert die EU-Sprachvokabular-URIs der Expressions (J13.1: DE/FR/IT
-/// flächendeckend, EN 290, RM 85). Reiner Helfer ohne Provenance.
+/// Liefert die **Sprach-Codes** (`de|fr|it|en|rm`) — dieselben Werte, die
+/// alle anderen Primitive als `lang`-Parameter erwarten (68 §C-1: die rohen
+/// EU-Vokabular-URIs waren für den Konsumenten nicht rückführbar). Fremde
+/// URIs ausserhalb des Amtssprachen-Vokabulars werden roh durchgereicht
+/// statt verschluckt. Reiner Helfer ohne Provenance.
 pub async fn list_expressions(
     client: &impl SparqlClient,
     eli: &Eli,
@@ -166,7 +169,11 @@ pub async fn list_expressions(
     Ok(res
         .bindings()
         .iter()
-        .filter_map(|b| val(b, "lang").map(str::to_string))
+        .filter_map(|b| val(b, "lang"))
+        .map(|uri| match Language::from_vocab_uri(uri) {
+            Some(l) => l.tag().to_string(),
+            None => uri.to_string(),
+        })
         .collect())
 }
 
@@ -254,18 +261,29 @@ mod tests {
         assert!(matches!(err, JoluxError::NotFound(_)));
     }
 
+    /// 68 §C-1: Die EU-Vokabular-URIs werden auf die eigenen Sprach-Codes
+    /// gemappt — dieselben Werte, die jedes `lang`-Argument erwartet. Fremde
+    /// URIs werden roh durchgereicht, nie verschluckt.
     #[tokio::test]
-    async fn expressions_list_language_uris() {
+    async fn expressions_map_to_own_language_codes() {
         let client = MockSparqlClient::from_json(
             r#"{"head":{"vars":["lang"]},"results":{"bindings":[
               {"lang":{"type":"uri","value":"http://publications.europa.eu/resource/authority/language/DEU"}},
               {"lang":{"type":"uri","value":"http://publications.europa.eu/resource/authority/language/FRA"}},
-              {"lang":{"type":"uri","value":"http://publications.europa.eu/resource/authority/language/ITA"}}
+              {"lang":{"type":"uri","value":"http://publications.europa.eu/resource/authority/language/ROH"}},
+              {"lang":{"type":"uri","value":"http://publications.europa.eu/resource/authority/language/LAT"}}
             ]}}"#,
         );
         let eli = Eli::new("eli/cc/2017/762").unwrap();
         let langs = list_expressions(&client, &eli).await.unwrap();
-        assert_eq!(langs.len(), 3);
-        assert!(langs[0].ends_with("/DEU"));
+        assert_eq!(
+            langs,
+            vec![
+                "de",
+                "fr",
+                "rm",
+                "http://publications.europa.eu/resource/authority/language/LAT"
+            ]
+        );
     }
 }

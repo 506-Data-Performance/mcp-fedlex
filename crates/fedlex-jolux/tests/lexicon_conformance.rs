@@ -244,8 +244,8 @@ async fn jlx_res_05_list_expressions() {
         "EnG muss in >= 3 Sprachen vorliegen (J13.1), got {langs:?}"
     );
     assert!(
-        langs.iter().any(|l| l.ends_with("/DEU")),
-        "EU-Sprachvokabular-URIs erwartet, got {langs:?}"
+        langs.iter().any(|l| l == "de"),
+        "Sprach-Codes erwartet (68 C-1), got {langs:?}"
     );
 }
 

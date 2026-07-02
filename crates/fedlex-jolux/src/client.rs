@@ -162,6 +162,20 @@ impl Language {
             Language::Roh => "rm",
         }
     }
+
+    /// Umkehrung von [`Language::vocab_uri`] (68 §C-1): mappt eine
+    /// EU-Sprachvokabular-URI zurück auf die Sprache. `None` für fremde URIs.
+    pub fn from_vocab_uri(uri: &str) -> Option<Self> {
+        [
+            Language::De,
+            Language::Fr,
+            Language::It,
+            Language::En,
+            Language::Roh,
+        ]
+        .into_iter()
+        .find(|l| l.vocab_uri() == uri)
+    }
 }
 
 #[cfg(test)]

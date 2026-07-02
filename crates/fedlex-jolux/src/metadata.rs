@@ -20,13 +20,18 @@ pub struct LawMetadata {
     pub date_entry_in_force: Option<String>,
     /// Dokumenttyp-URI (`jolux:typeDocument`, opak -> via Vocabulary auflösen).
     pub type_document: Option<String>,
+    /// Deutsches Label des Dokumenttyps (z.B. «Bundesgesetz»), direkt in
+    /// der Query gejoint (68 §C-1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_document_label: Option<String>,
 }
 
-const META_Q: &str = r#"SELECT ?sr ?title ?dateDocument ?dateEntryInForce ?typeDocument WHERE {
+const META_Q: &str = r#"SELECT ?sr ?title ?dateDocument ?dateEntryInForce ?typeDocument ?typeLabel WHERE {
   OPTIONAL { <__URI__> jolux:historicalLegalId ?sr }
   OPTIONAL { <__URI__> jolux:dateDocument ?dateDocument }
   OPTIONAL { <__URI__> jolux:dateEntryInForce ?dateEntryInForce }
-  OPTIONAL { <__URI__> jolux:typeDocument ?typeDocument }
+  OPTIONAL { <__URI__> jolux:typeDocument ?typeDocument
+    OPTIONAL { ?typeDocument skos:prefLabel ?typeLabel . FILTER(LANG(?typeLabel) = "de") } }
   OPTIONAL {
     <__URI__> jolux:isRealizedBy ?expr .
     ?expr jolux:language <http://publications.europa.eu/resource/authority/language/DEU> ;
@@ -62,6 +67,10 @@ pub async fn get_law_metadata(
             .and_then(|b| val(b, "dateEntryInForce"))
             .map(str::to_string),
         type_document: b.and_then(|b| val(b, "typeDocument")).map(str::to_string),
+        type_document_label: b
+            .and_then(|b| val(b, "typeLabel"))
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
     };
 
     let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
@@ -75,13 +84,14 @@ mod tests {
     use time::macros::date;
 
     const FIXTURE: &str = r#"{
-      "head": {"vars": ["sr","title","dateDocument","dateEntryInForce","typeDocument"]},
+      "head": {"vars": ["sr","title","dateDocument","dateEntryInForce","typeDocument","typeLabel"]},
       "results": {"bindings": [{
         "sr": {"type":"literal","value":"730.0"},
         "title": {"type":"literal","xml:lang":"de","value":"Energiegesetz vom 30. September 2016 (EnG)"},
         "dateDocument": {"type":"literal","value":"2016-09-30"},
         "dateEntryInForce": {"type":"literal","value":"2018-01-01"},
-        "typeDocument": {"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/resource-type/21"}
+        "typeDocument": {"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/resource-type/21"},
+        "typeLabel": {"type":"literal","xml:lang":"de","value":"Bundesgesetz"}
       }]}
     }"#;
 
@@ -104,6 +114,11 @@ mod tests {
         assert_eq!(
             resp.data().date_entry_in_force.as_deref(),
             Some("2018-01-01")
+        );
+        // 68 §C-1: Dokumenttyp-Label direkt gejoint.
+        assert_eq!(
+            resp.data().type_document_label.as_deref(),
+            Some("Bundesgesetz")
         );
 
         // ADR-004: Provenance trägt ELI + Stichtag.

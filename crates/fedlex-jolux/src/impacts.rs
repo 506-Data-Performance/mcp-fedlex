@@ -12,6 +12,11 @@ pub struct Impact {
     pub impact_uri: String,
     /// Typ der Änderung (opake Vocabulary-URI: Änderung/Inkrafttreten/Aufhebung …).
     pub impact_type: Option<String>,
+    /// Deutsches Label des Änderungstyps, direkt in der Query gejoint
+    /// (68 §C-1) — erspart dem Konsumenten den `resolve_vocabulary_label`-
+    /// Roundtrip pro URI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impact_type_label: Option<String>,
     /// Inkrafttreten der Änderung.
     pub date_entry_in_force: Option<String>,
     /// Freitext-Kommentar (seit 2023 oft die betroffenen Artikel, z.B. "Art. 5, 7").
@@ -23,9 +28,10 @@ pub struct Impact {
 // DISTINCT (68 §C-3): ?target ist gefiltert, aber nicht projiziert — ein
 // Impact, der mehrere Subdivisions desselben Erlasses trifft, erzeugte sonst
 // identische Zeilen (Join-Fanout; live beobachtet an Art. 19 EnG).
-const IMPACTS_Q: &str = r#"SELECT DISTINCT ?impact ?type ?date ?comment ?from WHERE {
+const IMPACTS_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?comment ?from WHERE {
   ?impact jolux:impactToLegalResource ?target .
-  OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
+  OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type
+    OPTIONAL { ?type skos:prefLabel ?typeLabel . FILTER(LANG(?typeLabel) = "de") } }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
   OPTIONAL { ?impact jolux:impactToLegalResourceComment ?comment }
   OPTIONAL { ?impact jolux:impactFromLegalResource ?from }
@@ -55,6 +61,7 @@ pub async fn get_impacts(
         Some(Impact {
             impact_uri,
             impact_type: val(b, "type").map(str::to_string),
+            impact_type_label: nonempty(val(b, "typeLabel")),
             date_entry_in_force: val(b, "date").map(str::to_string),
             comment: nonempty(val(b, "comment")),
             from: val(b, "from").map(str::to_string),
@@ -90,9 +97,10 @@ fn dedup_impacts(iter: impl Iterator<Item = Impact>) -> Vec<Impact> {
 /// nur re-exportiert, damit die JOLux-API stabil bleibt.
 pub use fedlex_core::normalize_eid;
 
-const ARTICLE_HISTORY_Q: &str = r#"SELECT DISTINCT ?impact ?type ?date ?from ?comment WHERE {
+const ARTICLE_HISTORY_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?from ?comment WHERE {
   ?impact jolux:impactToLegalResource ?target .
-  OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
+  OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type
+    OPTIONAL { ?type skos:prefLabel ?typeLabel . FILTER(LANG(?typeLabel) = "de") } }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
   OPTIONAL { ?impact jolux:impactFromLegalResource ?from }
   OPTIONAL { ?impact jolux:impactToLegalResourceComment ?comment }
@@ -125,6 +133,7 @@ pub async fn get_article_history(
         Some(Impact {
             impact_uri: val(b, "impact")?.to_string(),
             impact_type: val(b, "type").map(str::to_string),
+            impact_type_label: nonempty(val(b, "typeLabel")),
             date_entry_in_force: val(b, "date").map(str::to_string),
             comment: nonempty(val(b, "comment")),
             from: val(b, "from").map(str::to_string),
@@ -194,10 +203,11 @@ mod tests {
     use time::macros::date;
 
     const FIXTURE: &str = r#"{
-      "head": {"vars": ["impact","type","date","comment","from"]},
+      "head": {"vars": ["impact","type","typeLabel","date","comment","from"]},
       "results": {"bindings": [
         {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a1"},
          "type":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/impact-of-a-legal-resource-type/1"},
+         "typeLabel":{"type":"literal","xml:lang":"de","value":"Änderung"},
          "date":{"type":"literal","value":"2020-06-01"},
          "comment":{"type":"literal","value":"Art. 5, 7, 12"}},
         {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a2"},
@@ -216,6 +226,11 @@ mod tests {
 
         assert_eq!(resp.data().len(), 2);
         assert_eq!(resp.data()[0].comment.as_deref(), Some("Art. 5, 7, 12"));
+        // 68 §C-1: Typ-Label direkt gejoint.
+        assert_eq!(
+            resp.data()[0].impact_type_label.as_deref(),
+            Some("Änderung")
+        );
         assert_eq!(
             resp.data()[0].date_entry_in_force.as_deref(),
             Some("2020-06-01")

@@ -33,6 +33,16 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Vokabular-Labels direkt in den Antworten (68 §C-1):** Die opaken
+  Vokabular-URIs (`impact-type/1`, `enforcement-status/3`,
+  `resource-type/21`, Genre-URIs) tragen jetzt ihr deutsches Label inline —
+  per `skos:prefLabel`-Join in derselben SPARQL-Query, kein zweiter
+  Roundtrip: `impact_type_label` (Historie), `status_label`
+  (`check_in_force`), `type_document_label` (`get_law_metadata`),
+  `genre_label` (`get_oc_act`/`get_fga_documents`). `list_expressions`
+  liefert statt EU-Vokabular-URIs die eigenen Sprach-Codes (`de|fr|it|en|rm`)
+  — direkt als `lang`-Argument weiterverwendbar; fremde URIs werden roh
+  durchgereicht. Query-Formen live gegen Fedlex verifiziert.
 - **Truncation-Signale statt stiller Kappung (68 §B-2):** Alle limit-gekappten
   Listen tragen jetzt `truncated` + `limit_applied` (`search_law`,
   `find_related_topic`, `find_treaties`, `list_vocabulary`, `explore_node`);

@@ -647,7 +647,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet die verfuegbaren Sprachvarianten einer Konsolidierung (JLX-RES-05) — pruefe damit VOR read_article, ob eine Sprache (z.B. rm) existiert. Liefert einen BELEG (kind=norm).",
+            "description": "Listet die verfuegbaren Sprachvarianten einer Konsolidierung (JLX-RES-05) als Codes (de|fr|it|en|rm) — direkt als lang-Argument der anderen Tools verwendbar. Pruefe damit VOR read_article, ob eine Sprache (z.B. rm) existiert. Liefert einen BELEG (kind=norm).",
             "properties": {
                 "eli": { "type": "string", "description": "ELI der Konsolidierung oder des Erlasses" }
             },

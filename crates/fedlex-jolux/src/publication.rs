@@ -18,16 +18,20 @@ pub struct OcAct {
     pub publication_date: Option<String>,
     /// Genre (opake Vokabular-URI, 99.6 % befüllt, J8.3).
     pub genre: Option<String>,
+    /// Deutsches Genre-Label, direkt in der Query gejoint (68 §C-1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre_label: Option<String>,
     /// Federführendes Amt (`responsibilityOf`, 47.4 % befüllt).
     pub responsible_office: Option<String>,
     /// Memorial (AS-Wochenbulletin), in dem der Akt publiziert wurde.
     pub memorial: Option<String>,
 }
 
-const OC_Q: &str = r#"SELECT ?oc ?pub ?genre ?resp ?memorial WHERE {
+const OC_Q: &str = r#"SELECT ?oc ?pub ?genre ?genreLabel ?resp ?memorial WHERE {
   <__URI__> jolux:basicAct ?oc .
   OPTIONAL { ?oc jolux:publicationDate ?pub }
-  OPTIONAL { ?oc jolux:legalResourceGenre ?genre }
+  OPTIONAL { ?oc jolux:legalResourceGenre ?genre
+    OPTIONAL { ?genre skos:prefLabel ?genreLabel . FILTER(LANG(?genreLabel) = "de") } }
   OPTIONAL { ?oc jolux:responsibilityOf ?resp }
   OPTIONAL { ?oc jolux:isPartOf ?memorial }
 } LIMIT 1"#;
@@ -53,6 +57,9 @@ pub async fn get_oc_act(
         oc_uri: val(b, "oc").unwrap_or_default().to_string(),
         publication_date: val(b, "pub").map(str::to_string),
         genre: val(b, "genre").map(str::to_string),
+        genre_label: val(b, "genreLabel")
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
         responsible_office: val(b, "resp").map(str::to_string),
         memorial: val(b, "memorial").map(str::to_string),
     };
@@ -114,16 +121,20 @@ pub struct FgaDocument {
     pub uri: String,
     /// Genre (opake Vokabular-URI), sofern vorhanden.
     pub genre: Option<String>,
+    /// Deutsches Genre-Label (z.B. «Botschaft»), direkt gejoint (68 §C-1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre_label: Option<String>,
     /// Publikationsdatum, sofern vorhanden.
     pub publication_date: Option<String>,
 }
 
-const FGA_Q: &str = r#"SELECT DISTINCT ?fga ?genre ?pub WHERE {
+const FGA_Q: &str = r#"SELECT DISTINCT ?fga ?genre ?genreLabel ?pub WHERE {
   <__URI__> jolux:basicAct ?oc .
   ?draft jolux:hasResultingLegalResource ?oc ;
          jolux:hasResultingLegalResource ?fga .
   FILTER(CONTAINS(STR(?fga), "/eli/fga/"))
-  OPTIONAL { ?fga jolux:legalResourceGenre ?genre }
+  OPTIONAL { ?fga jolux:legalResourceGenre ?genre
+    OPTIONAL { ?genre skos:prefLabel ?genreLabel . FILTER(LANG(?genreLabel) = "de") } }
   OPTIONAL { ?fga jolux:publicationDate ?pub }
 } LIMIT 50"#;
 
@@ -148,6 +159,9 @@ pub async fn get_fga_documents(
             Some(FgaDocument {
                 uri: val(b, "fga")?.to_string(),
                 genre: val(b, "genre").map(str::to_string),
+                genre_label: val(b, "genreLabel")
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string),
                 publication_date: val(b, "pub").map(str::to_string),
             })
         })
@@ -169,6 +183,7 @@ mod tests {
               "oc":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/oc/2017/762"},
               "pub":{"type":"literal","value":"2017-11-21"},
               "genre":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/resource-genre/erlasstexte"},
+              "genreLabel":{"type":"literal","xml:lang":"de","value":"Erlasstexte"},
               "memorial":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/collection/oc/2017/105"}
             }]}}"#,
         );
@@ -181,6 +196,8 @@ mod tests {
             resp.data().genre.is_some(),
             "Genre liegt auf OC-Ebene (J8.3)"
         );
+        // 68 §C-1: Genre-Label direkt gejoint.
+        assert_eq!(resp.data().genre_label.as_deref(), Some("Erlasstexte"));
         assert!(
             resp.data()
                 .memorial
