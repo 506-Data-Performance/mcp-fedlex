@@ -16,6 +16,11 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Tool-Annotations (67 §P-2):** Jeder `tools/list`-Eintrag trägt jetzt
+  `annotations` mit `readOnlyHint: true`, `idempotentHint: true`,
+  `openWorldHint: false` — zentral gesetzt, weil der Reader als
+  CQRS-Leseseite ausnahmslos read-only ist; der Baseline-Test verriegelt
+  die Annotation für jedes Tool.
 - **Readiness von Fedlex entkoppelt (67 §H-8):** `/readyz` kennt jetzt
   kritische (Redis) und **informative** Prüfungen (Fedlex, mit 2-s-Deckel):
   Ein Fedlex-Ausfall erscheint als `degraded` im Body, nimmt die Pods aber

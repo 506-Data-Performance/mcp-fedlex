@@ -256,6 +256,23 @@ async fn tools_list_entry_shape_is_frozen() {
             entry["inputSchema"], entry["schema"],
             "inputSchema und schema müssen denselben Wert tragen (additives Doppel-Emit): {entry}"
         );
+        // Tool-Annotations (67 §P-2): Der Reader ist die CQRS-Leseseite —
+        // jedes Tool MUSS als read-only, idempotent und closed-world
+        // annotiert sein. Bricht dieser Test, wurde entweder die Annotation
+        // vergessen oder ein nicht-read-only Tool eingeführt (dann ist mehr
+        // kaputt als dieser Test).
+        assert_eq!(
+            entry["annotations"]["readOnlyHint"], true,
+            "jedes Tool traegt readOnlyHint=true: {entry}"
+        );
+        assert_eq!(
+            entry["annotations"]["idempotentHint"], true,
+            "jedes Tool traegt idempotentHint=true: {entry}"
+        );
+        assert_eq!(
+            entry["annotations"]["openWorldHint"], false,
+            "geschlossener Fedlex-Korpus: openWorldHint=false: {entry}"
+        );
     }
 
     // `read_article` ist Teil des stabilen Tool-Satzes (vom Smoke-Test genutzt).

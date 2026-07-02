@@ -63,6 +63,18 @@ impl Registry {
                     // tragen denselben Wert — siehe Doc-Kommentar oben.
                     "inputSchema": schema,
                     "schema": schema,
+                    // Tool-Annotations (67 §P-2). Zentral gesetzt, weil sie
+                    // eine Architektur-Invariante spiegeln: Der Reader ist die
+                    // CQRS-Leseseite — JEDES Tool ist read-only und idempotent
+                    // (gleiche Anfrage + Stichtag = gleiche Antwort), und der
+                    // Fedlex-Korpus ist eine geschlossene Domäne (kein Open-
+                    // World-Verhalten wie Websuche). Käme je ein schreibendes
+                    // Tool, müsste das McpTool-Trait Annotations liefern.
+                    "annotations": {
+                        "readOnlyHint": true,
+                        "idempotentHint": true,
+                        "openWorldHint": false,
+                    },
                 })
             })
             .collect()
