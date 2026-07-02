@@ -3,6 +3,8 @@
 //! Die jolux-Primitive sind transportfrei — dieser Client liefert den
 //! Live-Transport gegen `fedlex.data.admin.ch` (oder einen Spiegel).
 
+use crate::error::BridgeError;
+use crate::timeouts::HttpTimeouts;
 use async_trait::async_trait;
 use fedlex_jolux::{JoluxError, SparqlClient, SparqlResults};
 
@@ -24,17 +26,31 @@ pub struct HttpSparqlClient {
 }
 
 impl HttpSparqlClient {
-    /// Client gegen den gegebenen Endpoint.
-    pub fn new(endpoint: impl Into<String>) -> Self {
-        Self {
-            http: reqwest::Client::new(),
-            endpoint: endpoint.into(),
-        }
+    /// Client gegen den gegebenen Endpoint mit Default-Timeouts (H-1:
+    /// jeder Client dieser Crate trägt zwingend Zeitgrenzen).
+    pub fn new(endpoint: impl Into<String>) -> Result<Self, BridgeError> {
+        Self::with_timeouts(endpoint, HttpTimeouts::default())
     }
 
-    /// Client gegen den öffentlichen Fedlex-Endpoint.
-    pub fn fedlex() -> Self {
+    /// Client gegen den gegebenen Endpoint mit expliziten Zeitgrenzen.
+    pub fn with_timeouts(
+        endpoint: impl Into<String>,
+        timeouts: HttpTimeouts,
+    ) -> Result<Self, BridgeError> {
+        Ok(Self {
+            http: timeouts.client()?,
+            endpoint: endpoint.into(),
+        })
+    }
+
+    /// Client gegen den öffentlichen Fedlex-Endpoint mit Default-Timeouts.
+    pub fn fedlex() -> Result<Self, BridgeError> {
         Self::new(FEDLEX_ENDPOINT)
+    }
+
+    /// Client gegen den öffentlichen Fedlex-Endpoint mit expliziten Zeitgrenzen.
+    pub fn fedlex_with(timeouts: HttpTimeouts) -> Result<Self, BridgeError> {
+        Self::with_timeouts(FEDLEX_ENDPOINT, timeouts)
     }
 }
 

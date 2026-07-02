@@ -13,6 +13,17 @@
 | `BIND_ADDR` | nein | `0.0.0.0:8080` | Socket, auf dem der Reader lauscht (`HOST:PORT`). |
 | `REDIS_URL` | nein | `redis://127.0.0.1:6379` | Quota-Backend (verteiltes Token-Bucket). Bei aktiviertem mTLS **muss** das Schema `rediss://` sein. |
 
+## 1a. Upstream-Zeitgrenzen (67 §H-1)
+
+Alle ausgehenden HTTP-Aufrufe (Fedlex-SPARQL, AKN-Filestore, JWKS-Abruf) tragen zwingend
+ein Connect- und ein Gesamt-Timeout — ein langsamer Upstream darf keine Tasks unbegrenzt
+binden. **Unparsebare Werte brechen den Start hart ab** (kein stiller Default bei Tippfehlern).
+
+| Variable | Pflicht | Default | Beschreibung |
+| --- | --- | --- | --- |
+| `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` | nein | `3000` | Zeitgrenze für den TCP/TLS-Verbindungsaufbau zu Upstreams (Millisekunden). |
+| `MCP_UPSTREAM_TIMEOUT_MS` | nein | `15000` | Zeitgrenze für den gesamten Upstream-Request inkl. Body (Millisekunden). Fedlex-SPARQL braucht für komplexe Queries mehrere Sekunden — großzügig, aber endlich wählen. |
+
 ## 1b. Protokoll-Negotiation (ADR-008 · Quelle: `src/protocol.rs`)
 
 Der `initialize`-Handshake handelt die MCP-Protokollversion aus. Nennt der Client eine

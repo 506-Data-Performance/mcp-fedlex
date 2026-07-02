@@ -15,7 +15,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use fedlex_bridge::{AknFetcher, HttpSparqlClient, HttpXmlSource};
+use fedlex_bridge::{AknFetcher, HttpSparqlClient, HttpTimeouts, HttpXmlSource};
 use mcp_reader::app::{app, serve};
 use mcp_reader::auth::{AuthResolver, JwksAuthResolver, JwtAuthResolver, StaticAuthResolver};
 use mcp_reader::discovery::register_discovery_tools;
@@ -47,31 +47,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = build_quota_backend(&redis_url)?;
     let limiter = RateLimiter::with_policy(backend.clone(), QuotaPolicy::default());
 
+    // Zeitgrenzen für alle Upstream-Aufrufe (Fedlex-SPARQL, Filestore, JWKS).
+    // Ohne sie bindet ein langsamer Upstream Tasks unbegrenzt (67 §H-1).
+    let timeouts = upstream_timeouts_from_env()?;
+
     // Credential-Herkunft zur Laufzeit. JWT-Konfiguration gewinnt vor dem
     // Dev-Token. Ohne beides bleibt der Resolver leer (fail-closed, kein
     // einziges Credential gültig).
-    let auth: Box<dyn AuthResolver + Send + Sync> = build_auth_resolver()?;
+    let auth: Box<dyn AuthResolver + Send + Sync> = build_auth_resolver(timeouts)?;
+
+    // Ein SPARQL-Client für alle Live-Pfade dieses Pods (reqwest teilt den
+    // Connection-Pool über Clones), mit Zeitgrenzen aus der Umgebung.
+    let sparql = HttpSparqlClient::fedlex_with(timeouts)?;
 
     // Direct Fetch. Ein Fetcher (und damit ein Manifestations-Cache) für alle
     // Navigations-Tools dieses Pods.
     let fetcher = Arc::new(AknFetcher::new(
-        HttpSparqlClient::fedlex(),
-        HttpXmlSource::new(),
+        sparql.clone(),
+        HttpXmlSource::with_timeouts(timeouts)?,
         FETCHER_CACHE_CAPACITY,
     ));
     let mut registry = Registry::new();
     register_navigation_tools(&mut registry, fetcher);
 
-    // Discovery-Tools (ADR-006). Eigener SPARQL-Client für die Live-Auflösung
-    // gegen Fedlex (Suche/SR-Auflösung/Themen). Sie liefern Kandidaten-ELIs mit
-    // Hinweis-Provenance und sind nur Navigator/Validator sichtbar.
-    register_discovery_tools(&mut registry, Arc::new(HttpSparqlClient::fedlex()));
+    // Discovery-Tools (ADR-006). Live-Auflösung gegen Fedlex (Suche/SR-
+    // Auflösung/Themen). Sie liefern Kandidaten-ELIs mit Hinweis-Provenance
+    // und sind nur Navigator/Validator sichtbar.
+    register_discovery_tools(&mut registry, Arc::new(sparql.clone()));
 
-    // JOLux-Metadaten-Tools (ADR-007, Tranche A: Temporal). Eigener SPARQL-
-    // Client für die Live-Auflösung gegen Fedlex. Sie belegen Eigenschaften
-    // eines bekannten Erlasses (Norm-Provenance) und sind, wie Discovery, nur
-    // Navigator/Validator sichtbar und im Quota gleich gewichtet.
-    register_metadata_tools(&mut registry, Arc::new(HttpSparqlClient::fedlex()));
+    // JOLux-Metadaten-Tools (ADR-007, Tranche A: Temporal). Sie belegen
+    // Eigenschaften eines bekannten Erlasses (Norm-Provenance) und sind, wie
+    // Discovery, nur Navigator/Validator sichtbar und im Quota gleich gewichtet.
+    register_metadata_tools(&mut registry, Arc::new(sparql.clone()));
 
     let today = time::OffsetDateTime::now_utc().date();
 
@@ -81,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let health = Arc::new(
         HealthState::new()
             .with_probe(Arc::new(QuotaBackendProbe::new(backend)))
-            .with_probe(Arc::new(SparqlProbe::new(HttpSparqlClient::fedlex()))),
+            .with_probe(Arc::new(SparqlProbe::new(sparql))),
     );
 
     let listener = TcpListener::bind(addr).await?;
@@ -93,6 +100,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     serve(listener, app(service, Arc::clone(&health))).await?;
     Ok(())
+}
+
+/// Liest die Upstream-Zeitgrenzen aus der Umgebung.
+///
+/// MCP_UPSTREAM_CONNECT_TIMEOUT_MS (Default 3000) und
+/// MCP_UPSTREAM_TIMEOUT_MS (Default 15000). Unparsebare Werte brechen den
+/// Start hart ab — eine stillschweigend ignorierte Fehlkonfiguration wäre
+/// hier gefährlicher als ein klarer Startfehler.
+fn upstream_timeouts_from_env() -> Result<HttpTimeouts, Box<dyn std::error::Error>> {
+    fn ms(var: &str, default: u64) -> Result<std::time::Duration, Box<dyn std::error::Error>> {
+        match std::env::var(var) {
+            Ok(raw) => {
+                let n: u64 = raw
+                    .parse()
+                    .map_err(|_| format!("{var} muss eine Millisekunden-Zahl sein, war {raw:?}"))?;
+                Ok(std::time::Duration::from_millis(n))
+            }
+            Err(_) => Ok(std::time::Duration::from_millis(default)),
+        }
+    }
+    Ok(HttpTimeouts {
+        connect: ms("MCP_UPSTREAM_CONNECT_TIMEOUT_MS", 3_000)?,
+        total: ms("MCP_UPSTREAM_TIMEOUT_MS", 15_000)?,
+    })
 }
 
 /// Baut das Quota-Backend anhand der Umgebung.
@@ -141,8 +172,9 @@ fn build_quota_backend(redis_url: &str) -> Result<RedisQuotaBackend, Box<dyn std
 /// MCP_JWT_HS256_SECRET, dann MCP_JWT_RS256_PUBKEY_FILE (PEM-Pfad), zuletzt
 /// MCP_DEV_TOKEN. Im JWT-Modus ist MCP_JWT_ISSUER Pflicht und
 /// MCP_JWT_AUDIENCE optional.
-fn build_auth_resolver() -> Result<Box<dyn AuthResolver + Send + Sync>, Box<dyn std::error::Error>>
-{
+fn build_auth_resolver(
+    timeouts: HttpTimeouts,
+) -> Result<Box<dyn AuthResolver + Send + Sync>, Box<dyn std::error::Error>> {
     let issuer = std::env::var("MCP_JWT_ISSUER").ok();
     let audience = std::env::var("MCP_JWT_AUDIENCE").ok();
 
@@ -153,7 +185,10 @@ fn build_auth_resolver() -> Result<Box<dyn AuthResolver + Send + Sync>, Box<dyn 
             .and_then(|v| v.parse().ok())
             .unwrap_or(300);
         let resolver = Arc::new(JwksAuthResolver::new(issuer.clone(), audience));
-        spawn_jwks_refresher(Arc::clone(&resolver), url.clone(), refresh_secs);
+        // Auch der JWKS-Abruf trägt die Upstream-Zeitgrenzen (H-1) — ein
+        // hängender IdP darf den Refresh-Task nicht dauerhaft blockieren.
+        let http = timeouts.client()?;
+        spawn_jwks_refresher(Arc::clone(&resolver), http, url.clone(), refresh_secs);
         println!("JWT-Auth aktiv (JWKS {url}, Issuer {issuer}, Refresh {refresh_secs}s)");
         return Ok(Box::new(resolver));
     }
@@ -200,9 +235,13 @@ fn build_auth_resolver() -> Result<Box<dyn AuthResolver + Send + Sync>, Box<dyn 
 /// Fehler beim Abruf lassen den bisherigen Schlüsselsatz unangetastet
 /// (Verfügbarkeit vor Frische). Bis zum ersten Erfolg ist der Satz leer
 /// und der Resolver fail-closed.
-fn spawn_jwks_refresher(resolver: Arc<JwksAuthResolver>, url: String, refresh_secs: u64) {
+fn spawn_jwks_refresher(
+    resolver: Arc<JwksAuthResolver>,
+    http: reqwest::Client,
+    url: String,
+    refresh_secs: u64,
+) {
     tokio::spawn(async move {
-        let http = reqwest::Client::new();
         loop {
             match http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.text().await {

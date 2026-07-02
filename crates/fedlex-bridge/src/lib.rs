@@ -20,11 +20,13 @@
 pub mod error;
 pub mod fetcher;
 pub mod sparql_http;
+pub mod timeouts;
 pub mod xml_source;
 
 pub use error::BridgeError;
 pub use fetcher::AknFetcher;
 pub use sparql_http::{FEDLEX_ENDPOINT, HttpSparqlClient};
+pub use timeouts::HttpTimeouts;
 pub use xml_source::{HttpXmlSource, MockXmlSource, XmlSource};
 
 #[cfg(test)]

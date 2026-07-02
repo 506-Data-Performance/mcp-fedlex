@@ -17,4 +17,8 @@ pub enum BridgeError {
     /// Transportfehler beim XML-Download.
     #[error("XML-Download fehlgeschlagen: {0}")]
     Download(String),
+    /// Der HTTP-Client liess sich nicht konstruieren (TLS-Backend) — ein
+    /// Startfehler der Komposition, kein Laufzeitfehler.
+    #[error("HTTP-Client-Konfiguration ungueltig: {0}")]
+    Config(String),
 }

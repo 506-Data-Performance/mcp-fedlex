@@ -7,6 +7,16 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Upstream-Timeouts (67 §H-1):** Alle ausgehenden HTTP-Clients (Fedlex-SPARQL,
+  AKN-Filestore, JWKS-Abruf) tragen zwingend Connect- (3 s) und Gesamt-Timeout
+  (15 s), konfigurierbar über `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` /
+  `MCP_UPSTREAM_TIMEOUT_MS` (70_CONFIG §1a). Neu `fedlex_bridge::HttpTimeouts`;
+  `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
+  (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
+  `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+
 ## [0.2.0] - 2026-06-21
 
 MCP-Protokoll-Upgrade auf die stabile Spec-Revision `2025-11-25` (ADR-008

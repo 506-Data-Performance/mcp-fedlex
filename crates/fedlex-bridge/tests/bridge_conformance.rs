@@ -18,7 +18,11 @@ use time::macros::date;
 const ENG_WORK: &str = "eli/cc/2017/762";
 
 fn fetcher() -> AknFetcher<HttpSparqlClient, HttpXmlSource> {
-    AknFetcher::new(HttpSparqlClient::fedlex(), HttpXmlSource::new(), 8)
+    AknFetcher::new(
+        HttpSparqlClient::fedlex().expect("client"),
+        HttpXmlSource::new().expect("source"),
+        8,
+    )
 }
 
 fn stichtag() -> ValidAsOf {

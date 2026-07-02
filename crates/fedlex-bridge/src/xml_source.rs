@@ -6,6 +6,7 @@
 //! [`SparqlClient`]: fedlex_jolux::SparqlClient
 
 use crate::error::BridgeError;
+use crate::timeouts::HttpTimeouts;
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -18,15 +19,23 @@ pub trait XmlSource: Send + Sync {
 }
 
 /// Produktions-Quelle über HTTP (`fedlex.data.admin.ch/filestore/...`).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct HttpXmlSource {
     http: reqwest::Client,
 }
 
 impl HttpXmlSource {
-    /// Neue HTTP-Quelle mit eigenem Client.
-    pub fn new() -> Self {
-        Self::default()
+    /// Neue HTTP-Quelle mit Default-Timeouts (H-1: jeder Client dieser
+    /// Crate trägt zwingend Zeitgrenzen — deshalb kein `Default` mehr).
+    pub fn new() -> Result<Self, BridgeError> {
+        Self::with_timeouts(HttpTimeouts::default())
+    }
+
+    /// Neue HTTP-Quelle mit expliziten Zeitgrenzen.
+    pub fn with_timeouts(timeouts: HttpTimeouts) -> Result<Self, BridgeError> {
+        Ok(Self {
+            http: timeouts.client()?,
+        })
     }
 }
 
