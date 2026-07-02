@@ -38,11 +38,16 @@ LLM einen fremden Tool-Namen errät.
 | Pool | Reader | Navigator | Validator | Inhalt (Beispiele) |
 | --- | :--: | :--: | :--: | --- |
 | `LocalNavigation` | ✅ | ✅ | ✅ | `read_article`, `get_structure`, `search_text` … |
-| `LodFederation` | — | ✅ | ✅ | föderierte Referenzauflösung |
+| `LodFederation` * | — | ✅ | ✅ | föderierte Referenzauflösung |
 | `Discovery` | — | ✅ | ✅ | `search_law`, `resolve_sr_number`, `find_related_topic` |
 | `JoluxMetadata` | — | ✅ | ✅ | `check_in_force`, `get_impacts`, `get_taxonomy` … |
-| `Workspace` | — | ✅ | ✅ | Arbeitskontext |
+| `Workspace` * | — | ✅ | ✅ | Arbeitskontext |
 | `Validation` | — | — | ✅ | `compare_versions` |
+
+\* `LodFederation` und `Workspace` sind im Code **deklariert, aber unbestückt** (kein
+`register`-Aufruf in `main.rs`) — reserviert für künftige Tools. Deshalb sprechen README,
+CLAUDE.md und die Website konsistent von **«25 Tools über vier aktive Pools»**; diese
+Tabelle listet alle sechs `ToolPool`-Varianten (`crates/mcp-reader/src/tool.rs`).
 
 > **ansV läuft mit der Rolle `Navigator`** — Discovery und JOLux-Metadaten erlaubt,
 > Validierungs-Tools nicht.
