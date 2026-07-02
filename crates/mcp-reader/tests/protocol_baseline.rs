@@ -256,6 +256,17 @@ async fn tools_list_entry_shape_is_frozen() {
             entry["inputSchema"], entry["schema"],
             "inputSchema und schema müssen denselben Wert tragen (additives Doppel-Emit): {entry}"
         );
+        // Top-Level-`description` (68 §A-1): DAS Feld, das MCP-Hosts dem Modell
+        // zeigen. Muss nicht-leer sein und dem Schema-Text entsprechen — sonst
+        // erscheinen die Tools in Standard-Hosts ohne jede Erklärung.
+        assert!(
+            entry["description"].as_str().is_some_and(|d| !d.is_empty()),
+            "Tool-Eintrag ohne Top-Level-description (68 A-1): {entry}"
+        );
+        assert_eq!(
+            entry["description"], entry["inputSchema"]["description"],
+            "Top-Level-description muss dem Schema-Text entsprechen (eine Quelle): {entry}"
+        );
         // Tool-Annotations (67 §P-2): Der Reader ist die CQRS-Leseseite —
         // jedes Tool MUSS als read-only, idempotent und closed-world
         // annotiert sein. Bricht dieser Test, wurde entweder die Annotation

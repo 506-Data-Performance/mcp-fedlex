@@ -57,8 +57,13 @@ impl Registry {
             .filter(|t| role_allows(role, t.pool()))
             .map(|t| {
                 let schema = t.schema();
+                // Top-Level-`description` (68 §A-1): MCP-Hosts präsentieren dem
+                // Modell DIESES Feld — nicht `inputSchema.description`. Ohne das
+                // Doppel-Emit erschienen alle Tools in Standard-Hosts nackt.
+                let description = schema.get("description").cloned().unwrap_or(Value::Null);
                 json!({
                     "name": t.name(),
+                    "description": description,
                     // Standardschlüssel (Ziel-Revision) und Legacy-Schlüssel
                     // tragen denselben Wert — siehe Doc-Kommentar oben.
                     "inputSchema": schema,

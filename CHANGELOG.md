@@ -21,6 +21,12 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Top-Level-`description` in `tools/list` (68 §A-1):** Jeder Tool-Eintrag
+  trägt seine Beschreibung jetzt zusätzlich im MCP-Standardfeld `description` —
+  dem Feld, das Hosts dem Modell präsentieren. Zuvor stand der Text nur in
+  `inputSchema.description`, womit alle 40 Tools in Standard-Hosts ohne
+  Erklärung erschienen. Abnahme: `protocol_baseline` verlangt nicht-leere
+  Top-Level-Description == Schema-Text für jeden Eintrag.
 - **Upstream-Timeouts (67 §H-1):** Alle ausgehenden HTTP-Clients (Fedlex-SPARQL,
   AKN-Filestore, JWKS-Abruf) tragen zwingend Connect- (3 s) und Gesamt-Timeout
   (15 s), konfigurierbar über `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` /
