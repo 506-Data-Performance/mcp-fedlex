@@ -48,7 +48,12 @@ pub struct HealthState {
     live: AtomicBool,
     started: AtomicBool,
     probes: Vec<Arc<dyn ReadinessProbe>>,
+    informational: Vec<Arc<dyn ReadinessProbe>>,
 }
+
+/// Zeitdeckel pro informativer Prüfung (67 §H-8): `readyz` darf nie länger
+/// als die Kubernetes-Probe-Frist auf einen externen Endpunkt warten.
+const INFORMATIONAL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl HealthState {
     /// Neuer Zustand. Der Prozess gilt als lebendig, der Aufwärmlauf als noch
@@ -58,12 +63,25 @@ impl HealthState {
             live: AtomicBool::new(true),
             started: AtomicBool::new(false),
             probes: Vec::new(),
+            informational: Vec::new(),
         }
     }
 
-    /// Fügt eine Bereitschaftsprüfung hinzu (Builder-Stil).
+    /// Fügt eine Bereitschaftsprüfung hinzu (Builder-Stil). Schlägt sie fehl,
+    /// nimmt `readyz` die Instanz aus dem Load-Balancer.
     pub fn with_probe(mut self, probe: Arc<dyn ReadinessProbe>) -> Self {
         self.probes.push(probe);
+        self
+    }
+
+    /// Fügt eine **informative** Prüfung hinzu (67 §H-8): Ihr Fehlschlag
+    /// erscheint als `degraded` im `readyz`-Body, nimmt die Instanz aber
+    /// **nicht** aus dem Load-Balancer. Richtig für externe Abhängigkeiten
+    /// (Fedlex): Fällt der Upstream aus, können Cache und lokale Navigation
+    /// weiter bedienen — alle Pods gleichzeitig unready zu nehmen, wäre eine
+    /// selbstgemachte Kaskade.
+    pub fn with_informational_probe(mut self, probe: Arc<dyn ReadinessProbe>) -> Self {
+        self.informational.push(probe);
         self
     }
 
@@ -99,6 +117,21 @@ impl HealthState {
             }
         }
         failing
+    }
+
+    /// Fragt die informativen Prüfungen ab (mit Zeitdeckel) und sammelt die
+    /// Namen der degradierten Abhängigkeiten.
+    pub async fn degraded_probes(&self) -> Vec<String> {
+        let mut degraded = Vec::new();
+        for probe in &self.informational {
+            let ok = tokio::time::timeout(INFORMATIONAL_PROBE_TIMEOUT, probe.ready())
+                .await
+                .unwrap_or(false);
+            if !ok {
+                degraded.push(probe.name().to_string());
+            }
+        }
+        degraded
     }
 }
 
@@ -136,18 +169,28 @@ async fn startupz_handler(
     }
 }
 
-/// GET `/readyz`. 200, wenn alle Abhängigkeiten bereit sind, sonst 503 mit der
-/// Liste der fehlschlagenden Prüfungen.
+/// GET `/readyz`. 200, wenn alle **kritischen** Abhängigkeiten bereit sind,
+/// sonst 503 mit der Liste der fehlschlagenden Prüfungen. Informative
+/// Prüfungen (externe Upstreams, 67 §H-8) erscheinen nur als `degraded`
+/// im Body und ändern den Status nicht.
 async fn readyz_handler(
     State(state): State<Arc<HealthState>>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let failing = state.failing_probes().await;
+    let degraded = state.degraded_probes().await;
     if failing.is_empty() {
-        (StatusCode::OK, Json(json!({ "status": "ready" })))
+        if degraded.is_empty() {
+            (StatusCode::OK, Json(json!({ "status": "ready" })))
+        } else {
+            (
+                StatusCode::OK,
+                Json(json!({ "status": "ready", "degraded": degraded })),
+            )
+        }
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "not_ready", "failing": failing })),
+            Json(json!({ "status": "not_ready", "failing": failing, "degraded": degraded })),
         )
     }
 }
@@ -271,5 +314,41 @@ mod tests {
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(body["status"], "not_ready");
         assert_eq!(body["failing"][0], "redis");
+    }
+
+    /// Abnahme 67 §H-8: Eine degradierte informative Prüfung (externer
+    /// Upstream) lässt readyz auf 200 — der Pod bleibt im Load-Balancer,
+    /// der Ausfall ist im Body sichtbar. Nur kritische Prüfungen nehmen
+    /// die Instanz aus dem Verkehr.
+    #[tokio::test]
+    async fn degraded_informational_probe_keeps_readyz_green() {
+        let state = Arc::new(
+            HealthState::new()
+                .with_probe(Arc::new(StaticProbe {
+                    name: "redis",
+                    ready: true,
+                }))
+                .with_informational_probe(Arc::new(StaticProbe {
+                    name: "fedlex",
+                    ready: false,
+                })),
+        );
+        let app = health_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let text = String::from_utf8_lossy(&body);
+        assert!(
+            text.contains("\"degraded\":[\"fedlex\"]"),
+            "degraded muss sichtbar sein: {text}"
+        );
     }
 }

@@ -109,10 +109,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temporal = TemporalResolver::new(today);
     let service = Arc::new(McpService::new(registry, auth, limiter, temporal));
 
+    // Redis ist ready-kritisch (Quota); Fedlex nur informativ (67 §H-8):
+    // Fällt der externe Upstream aus, bedienen Cache und lokale Navigation
+    // weiter — alle Pods gleichzeitig unready zu nehmen, wäre eine
+    // selbstgemachte Kaskade. Der Ausfall bleibt im readyz-Body sichtbar.
     let health = Arc::new(
         HealthState::new()
             .with_probe(Arc::new(QuotaBackendProbe::new(backend)))
-            .with_probe(Arc::new(SparqlProbe::new(sparql_raw))),
+            .with_informational_probe(Arc::new(SparqlProbe::new(sparql_raw))),
     );
 
     let listener = TcpListener::bind(addr).await?;

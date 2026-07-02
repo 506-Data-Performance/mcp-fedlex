@@ -79,7 +79,10 @@ kubectl -n argocd get application mcp-fedlex                       # Synced / He
 ## 5. Post-Deploy-Smoke-Test (Pflicht)
 
 `/livez` ist anschlagsfrei und sagt **nichts** über die Quota-Redis-Verbindung. Die
-Wahrheit steht in `/readyz` (prüft Redis + Fedlex-SPARQL) und im JSON-RPC-Pfad.
+Wahrheit steht in `/readyz` (**kritisch**: Redis; **informativ**: Fedlex-SPARQL, erscheint
+bei Ausfall nur als `degraded` im Body, 67 §H-8 — ein Fedlex-Ausfall nimmt die Pods
+bewusst **nicht** aus dem Load-Balancer, Cache/lokale Navigation bedienen weiter) und im
+JSON-RPC-Pfad.
 Nach jedem Rollout:
 
 ```bash

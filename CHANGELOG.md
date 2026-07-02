@@ -16,6 +16,11 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Readiness von Fedlex entkoppelt (67 §H-8):** `/readyz` kennt jetzt
+  kritische (Redis) und **informative** Prüfungen (Fedlex, mit 2-s-Deckel):
+  Ein Fedlex-Ausfall erscheint als `degraded` im Body, nimmt die Pods aber
+  nicht mehr aus dem Load-Balancer — Cache und lokale Navigation bedienen
+  weiter. Abnahme: `degraded_informational_probe_keeps_readyz_green`.
 - **Graceful Shutdown (67 §H-7):** SIGTERM (Kubernetes) und Ctrl-C beenden
   den Server geordnet — In-Flight-Requests werden zu Ende bedient (Drain),
   neue Verbindungen nicht mehr angenommen. Rolling-Deploys produzieren keine
