@@ -23,7 +23,7 @@ consolidated federal law instead of letting it free-form its answers:
   **norm citation** (`kind: "norm"`) vs. a **discovery hint** (`kind: "hint"`, a
   candidate — *not* a citation), so a reasoner never accidentally records a hit
   as a cited norm.
-- 🔒 **Least-privilege RBAC** — 25 tools across four active pools, filtered by
+- 🔒 **Least-privilege RBAC** — 40 tools across four active pools, filtered by
   role (Reader ⊆ Navigator ⊆ Validator). Identity always comes from the verified
   credential, never from an LLM parameter.
 - 🧯 **Tenant isolation & quota** — enforced server-side per token (distributed,
@@ -41,23 +41,23 @@ consolidated federal law instead of letting it free-form its answers:
 
 ## What it can do
 
-25 tools across four active pools, RBAC-filtered (Reader ⊆ Navigator ⊆ Validator).
+40 tools across four active pools, RBAC-filtered (Reader ⊆ Navigator ⊆ Validator).
 The **Reader** sees only `LocalNavigation`; **Navigator** (how ansV runs) also gets
 `Discovery` and `JoluxMetadata`; **Validator** additionally gets `Validation`.
 
-**Navigation within the act text (AKN, pool `LocalNavigation`, 11 tools)**
+**Navigation within the act text (AKN, pool `LocalNavigation`, 13 tools)**
 `read_article` · `read_element` · `read_document` · `get_structure` · `search_text`
 · `get_metadata` · `get_references` · `get_modifications` · `list_components`
-· `extract_tables` · `detect_foreign_content`.
+· `extract_tables` · `detect_foreign_content` · `extract_change_notes` · `parse_unlinked_ref`.
 
-**Discovering acts (pool `Discovery`, 3 tools)**
-`search_law` · `resolve_sr_number` · `find_related_topic`. Hits carry
+**Discovering acts (pool `Discovery`, 10 tools)**
+`search_law` · `resolve_sr_number` · `find_related_topic` · `find_treaties` · `get_treaty_info` · `get_consultations` · `get_consultation_documents` · `resolve_vocabulary_label` · `list_vocabulary` · `explore_node`. Hits carry
 **hint provenance** (`kind: "hint"`) — candidates, not norm citations.
 
-**Metadata & relationships (JOLux, pool `JoluxMetadata`, 10 tools)**
+**Metadata & relationships (JOLux, pool `JoluxMetadata`, 16 tools)**
 `check_in_force` · `list_versions` · `resolve_consolidation_at` · `get_impacts` ·
 `get_outgoing_impacts` · `get_article_history` · `get_citations` · `get_taxonomy` ·
-`get_subdivisions` · `list_annexes`.
+`get_subdivisions` · `list_annexes` · `get_law_metadata` · `list_expressions` · `get_oc_act` · `get_memorial` · `get_fga_documents` · `get_drafts`.
 
 **Validation (pool `Validation`, 1 tool)**
 `compare_versions` (version comparison, Validator only).

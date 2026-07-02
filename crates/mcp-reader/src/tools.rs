@@ -14,9 +14,10 @@
 use crate::tool::{McpTool, ToolContext, ToolError, ToolPool};
 use async_trait::async_trait;
 use fedlex_akn::{
-    AknDocument, classify_pattern, detect_foreign_content, extract_tables, get_all_references,
-    get_article_text, get_document_structure, get_element_text, get_frbr_metadata,
-    get_modifications, get_readable_document, list_components, search_text,
+    AknDocument, classify_pattern, detect_foreign_content, extract_change_notes, extract_tables,
+    get_all_references, get_article_text, get_document_structure, get_element_text,
+    get_frbr_metadata, get_modifications, get_readable_document, list_components,
+    parse_unlinked_ref, search_text,
 };
 
 use fedlex_bridge::{AknFetcher, BridgeError, XmlSource};
@@ -71,6 +72,11 @@ where
     registry.register(Arc::new(DetectForeignContent {
         fetcher: Arc::clone(&fetcher),
     }));
+    // G-2-Rest, projiziert 2026-07-02 (ADR-010).
+    registry.register(Arc::new(ExtractChangeNotes {
+        fetcher: Arc::clone(&fetcher),
+    }));
+    registry.register(Arc::new(ParseUnlinkedRef));
     registry.register(Arc::new(ReadDocument { fetcher }));
 }
 
@@ -708,6 +714,77 @@ where
 // Tests — Mocks aus fedlex-jolux/fedlex-bridge, kein Netzwerk.
 // ---------------------------------------------------------------------------
 
+/// AKN-MOD-02. Aenderungsnotizen (redaktionelle Fussnoten) extrahieren.
+struct ExtractChangeNotes<C, S> {
+    fetcher: Arc<AknFetcher<C, S>>,
+}
+
+#[async_trait]
+impl<C, S> McpTool for ExtractChangeNotes<C, S>
+where
+    C: SparqlClient + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
+{
+    fn name(&self) -> &str {
+        "extract_change_notes"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::LocalNavigation
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Extrahiert Aenderungsnotizen (redaktionelle Fussnoten zu AS-Aenderungen) eines Erlasses zum Stichtag (AKN-MOD-02), optional auf ein Element begrenzt.",
+            "properties": {
+                "eli": { "type": "string", "description": "Work-ELI, z.B. eli/cc/2017/762" },
+                "within": { "type": "string", "description": "Optionale eId, auf die die Suche begrenzt wird" },
+                "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let doc = fetch(&self.fetcher, ctx, &args).await?;
+        let within = args.get("within").and_then(Value::as_str);
+        let (notes, prov) = extract_change_notes(doc.data(), within, ctx.stamp.valid_as_of())
+            .map_err(map_akn)?
+            .into_parts();
+        Ok(Response::new(to_value(notes)?, prov))
+    }
+}
+
+/// AKN-REF-02. Unverlinkten Verweis-Text ("Art. 9a", "SR 730.0") parsen.
+struct ParseUnlinkedRef;
+
+#[async_trait]
+impl McpTool for ParseUnlinkedRef {
+    fn name(&self) -> &str {
+        "parse_unlinked_ref"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::LocalNavigation
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Parst einen unverlinkten Verweis-Text (AKN-REF-02), z.B. 'Art. 9a' oder 'SR 730.0', in eine strukturierte Form. Reiner Parser, KEIN Beleg: das Ergebnis ist ein HINWEIS (kind=hint) — belege es anschliessend mit read_article/get_metadata.",
+            "properties": {
+                "label": { "type": "string", "description": "Der Verweis-Text, z.B. 'Artikel 7 Absatz 2'" }
+            },
+            "required": ["label"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let label = arg_str(&args, "label")?;
+        let parsed = parse_unlinked_ref(label);
+        // Ein geparster Verweis ist ein Suchkandidat, kein Beleg (ADR-006) —
+        // Hinweis-Provenance mit dem Gattungs-Sentinel der Discovery-Tools.
+        let eli = Eli::new("eli/cc").map_err(|e| ToolError::Upstream(e.to_string()))?;
+        let prov = ctx.stamp.into_hint_provenance(eli);
+        Ok(Response::new(to_value(parsed)?, prov))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1043,5 +1120,24 @@ mod tests {
             )
             .await;
         assert!(out["error"].as_str().unwrap().contains("not found"));
+    }
+
+    /// ADR-010-Abnahme: `parse_unlinked_ref` ist ein reiner Parser und
+    /// liefert einen HINWEIS (kind=hint), nie einen Beleg.
+    #[tokio::test]
+    async fn parse_unlinked_ref_yields_hint_not_norm() {
+        let r = registry();
+        let result = r
+            .dispatch(
+                &ctx(),
+                "parse_unlinked_ref",
+                serde_json::json!({ "label": "Art. 9a" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint");
+        assert!(
+            result["data"].is_object() || result["data"].is_string(),
+            "geparster Verweis fehlt: {result}"
+        );
     }
 }

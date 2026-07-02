@@ -28,6 +28,10 @@ use fedlex_core::{Eli, Provenance, Response};
 use fedlex_jolux::{
     JoluxError, Language, SparqlClient, find_related_by_topic, resolve_sr_number, search_law,
 };
+use fedlex_jolux::{
+    explore_node, find_treaties, get_consultation_documents, get_consultations, get_treaty_info,
+    list_vocabulary, resolve_vocabulary_label,
+};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -46,7 +50,29 @@ where
     registry.register(Arc::new(ResolveSrNumber {
         client: Arc::clone(&client),
     }));
-    registry.register(Arc::new(FindRelatedTopic { client }));
+    registry.register(Arc::new(FindRelatedTopic {
+        client: Arc::clone(&client),
+    }));
+    // Tranche D (Staatsvertraege, Genese, Vokabular), projiziert 2026-07-02 (ADR-010).
+    registry.register(Arc::new(FindTreaties {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetTreatyInfo {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetConsultations {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetConsultationDocuments {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(ResolveVocabularyLabel {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(ListVocabulary {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(ExploreNode { client }));
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +290,284 @@ where
 // ---------------------------------------------------------------------------
 // Tests — MockSparqlClient, kein Netzwerk.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tranche D (projiziert 2026-07-02, ADR-010) — alles Kandidaten/Kontext,
+// daher durchgehend HINWEIS-Provenance (kind=hint, ADR-006): Genese- und
+// Vertragskontext ist Recherchematerial, kein geltendes Recht.
+// ---------------------------------------------------------------------------
+
+/// JLX-TRT-02. Staatsvertraege finden (optional nach Land/Bilateralitaet).
+struct FindTreaties<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for FindTreaties<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "find_treaties"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Findet Staatsvertraege (JLX-TRT-02), optional gefiltert nach Vertragspartner-Land und Bilateralitaet. Liefert Kandidaten als HINWEISE (kind=hint), kein Beleg.",
+            "properties": {
+                "country_uri": { "type": "string", "description": "Optionale Land-URI des Vertragspartners" },
+                "bilateral": { "type": "boolean", "description": "Nur bilaterale (true) bzw. multilaterale (false) Vertraege" },
+                "limit": { "type": "integer", "default": 20, "maximum": 50 }
+            }
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let country = args.get("country_uri").and_then(Value::as_str);
+        let bilateral = args.get("bilateral").and_then(Value::as_bool);
+        let limit = arg_limit(&args);
+        let hits = find_treaties(self.client.as_ref(), country, bilateral, limit)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(json!({ "hits": to_value(hits)? }), prov))
+    }
+}
+
+/// JLX-TRT-01. Details eines Staatsvertrags-Prozesses.
+struct GetTreatyInfo<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetTreatyInfo<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_treaty_info"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Details eines Staatsvertrags-Prozesses (JLX-TRT-01): Partner, Daten, Status. URI stammt typischerweise aus find_treaties. Liefert einen HINWEIS (kind=hint) — belege den zugehoerigen Erlass separat.",
+            "properties": {
+                "uri": { "type": "string", "description": "Prozess-URI des Vertrags (aus find_treaties)" }
+            },
+            "required": ["uri"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let uri = arg_str(&args, "uri")?;
+        let info = get_treaty_info(self.client.as_ref(), uri)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(json!({ "treaty": to_value(info)? }), prov))
+    }
+}
+
+/// JLX-GEN-02. Vernehmlassungen zu einem Gesetzes-Entwurf.
+struct GetConsultations<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetConsultations<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_consultations"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Vernehmlassungen zu einem Entwurf (JLX-GEN-02). Draft-URI stammt aus get_drafts. Entstehungs-Kontext als HINWEIS (kind=hint) — kein geltendes Recht.",
+            "properties": {
+                "draft_uri": { "type": "string", "description": "Draft-URI (aus get_drafts)" }
+            },
+            "required": ["draft_uri"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let uri = arg_str(&args, "draft_uri")?;
+        let consultations = get_consultations(self.client.as_ref(), uri)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(
+            json!({ "consultations": to_value(consultations)? }),
+            prov,
+        ))
+    }
+}
+
+/// JLX-GEN-03. Dokumente einer Vernehmlassung.
+struct GetConsultationDocuments<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetConsultationDocuments<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_consultation_documents"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Dokumente einer Vernehmlassung (JLX-GEN-03): Berichte, Stellungnahmen. Entstehungs-Kontext als HINWEIS (kind=hint) — kein geltendes Recht.",
+            "properties": {
+                "consultation_uri": { "type": "string", "description": "Vernehmlassungs-URI (aus get_consultations)" }
+            },
+            "required": ["consultation_uri"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let uri = arg_str(&args, "consultation_uri")?;
+        let documents = get_consultation_documents(self.client.as_ref(), uri)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(
+            json!({ "documents": to_value(documents)? }),
+            prov,
+        ))
+    }
+}
+
+/// JLX-VOC-01. Label eines Vokabular-Terms aufloesen.
+struct ResolveVocabularyLabel<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for ResolveVocabularyLabel<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "resolve_vocabulary_label"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Loest die URI eines kontrollierten Vokabular-Terms zum sprachigen Label auf (JLX-VOC-01). Nachschlagewerk als HINWEIS (kind=hint).",
+            "properties": {
+                "vocab_uri": { "type": "string", "description": "Term-URI, z.B. aus get_taxonomy" },
+                "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
+            },
+            "required": ["vocab_uri"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let uri = arg_str(&args, "vocab_uri")?;
+        let lang = arg_lang(&args)?;
+        let label = resolve_vocabulary_label(self.client.as_ref(), uri, lang)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(json!({ "label": label }), prov))
+    }
+}
+
+/// JLX-VOC-02. Konzepte eines kontrollierten Vokabulars listen.
+struct ListVocabulary<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for ListVocabulary<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "list_vocabulary"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Listet Konzepte eines kontrollierten Vokabulars (SKOS-Schema, JLX-VOC-02), z.B. Rechtsgebiete. Nachschlagewerk als HINWEIS (kind=hint).",
+            "properties": {
+                "scheme_id": { "type": "string", "description": "Schema-Kennung des Vokabulars" },
+                "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" },
+                "limit": { "type": "integer", "default": 20, "maximum": 50 }
+            },
+            "required": ["scheme_id"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let scheme = arg_str(&args, "scheme_id")?;
+        let lang = arg_lang(&args)?;
+        let limit = arg_limit(&args);
+        let concepts = list_vocabulary(self.client.as_ref(), scheme, lang, limit)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(
+            json!({ "concepts": to_value(concepts)? }),
+            prov,
+        ))
+    }
+}
+
+/// JLX-VOC-03. Nachbarschaft eines LOD-Knotens erkunden.
+struct ExploreNode<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for ExploreNode<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "explore_node"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::Discovery
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Erkundet die Nachbarschaft eines Knotens im Fedlex-Graphen (JLX-VOC-03): ein-/ausgehende Kanten. Explorations-Werkzeug als HINWEIS (kind=hint).",
+            "properties": {
+                "uri": { "type": "string", "description": "Knoten-URI im Fedlex-LOD-Graphen" },
+                "limit": { "type": "integer", "default": 20, "maximum": 50 }
+            },
+            "required": ["uri"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let uri = arg_str(&args, "uri")?;
+        let limit = arg_limit(&args);
+        let neighborhood = explore_node(self.client.as_ref(), uri, limit)
+            .await
+            .map_err(map_jolux)?;
+        let prov = query_hint(ctx, "eli/cc")?;
+        Ok(Response::new(to_value(neighborhood)?, prov))
+    }
+}
 
 #[cfg(test)]
 mod tests {

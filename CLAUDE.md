@@ -4,7 +4,7 @@ Model-Context-Protocol-Server für **Fedlex** (Schweizer Bundesrecht), Produkt v
 mindful.bio. Gibt einem LLM **zitierfähigen**, zeitpunktgenauen Zugriff auf
 konsolidiertes Bundesrecht. Rust-Workspace, Edition 2024, MCP-Protokoll `2025-11-25`
 (Legacy `2024-11-05` nur auf explizite Anfrage). RBAC: Reader ⊆ Navigator ⊆ Validator;
-25 Tools über vier Pools (LocalNavigation / Discovery / JoluxMetadata / Validation).
+40 Tools über vier Pools (LocalNavigation / Discovery / JoluxMetadata / Validation; ADR-010).
 
 > README.md und CONTRIBUTING.md sind die ausführliche **Quelle der Wahrheit**. Diese
 > Datei ist die destillierte, immer geladene Kurzfassung — bei Konflikt gewinnen jene.

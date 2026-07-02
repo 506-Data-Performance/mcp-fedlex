@@ -13,8 +13,8 @@
 //! - ein `Projected`-Tool nicht (mehr) registriert ist,
 //! - ein registriertes Tool weder in der Matrix noch als Composite verbucht ist
 //!   (verwaist),
-//! - oder die dokumentierte Zähl-Invariante (24 projiziert / 23 ausgeschlossen,
-//!   + 1 Composite ohne Lexikon-Primitiv = 25 MCP-Tools) bricht.
+//! - oder die dokumentierte Zähl-Invariante (39 projiziert / 8 ausgeschlossen,
+//!   + 1 Composite ohne Lexikon-Primitiv = 40 MCP-Tools) bricht.
 
 //!
 //! ## Composite-Tools ohne Lexikon-Primitiv
@@ -104,21 +104,15 @@ use Projection::*;
 /// `Projected("<tool_name>")` führt den **Tool-Namen** (nicht den
 /// Lexikon-Funktionsnamen — diese weichen in drei Fällen ab, siehe Briefing §1.2).
 const MATRIX: &[(&str, Projection)] = &[
-    // ----- JOLux (27): 13 projiziert / 14 ausgeschlossen -----
+    // ----- JOLux (27): 26 projiziert / 1 ausgeschlossen (Tranche D projiziert 2026-07-02, ADR-010) -----
     ("JLX-RES-01", Projected("resolve_sr_number")),
     ("JLX-RES-02", Projected("search_law")),
-    (
-        "JLX-RES-03",
-        Excluded("Steckbrief; vom Reader intern genutzt, kein eigenständiges Agenten-Tool"),
-    ),
+    ("JLX-RES-03", Projected("get_law_metadata")),
     (
         "JLX-RES-04",
         Excluded("resolve_manifestation — interner Bridge-Schritt (AknFetcher)"),
     ),
-    (
-        "JLX-RES-05",
-        Excluded("list_expressions — Sprachvarianten-Auflösung, intern"),
-    ),
+    ("JLX-RES-05", Projected("list_expressions")),
     ("JLX-TMP-01", Projected("list_versions")),
     // Name weicht ab: Lexikon resolve_version_at → Tool resolve_consolidation_at
     ("JLX-TMP-02", Projected("resolve_consolidation_at")),
@@ -132,30 +126,18 @@ const MATRIX: &[(&str, Projection)] = &[
     ("JLX-TAX-01", Projected("get_taxonomy")),
     // Name weicht ab: Lexikon find_related_by_topic → Tool find_related_topic
     ("JLX-TAX-02", Projected("find_related_topic")),
-    (
-        "JLX-PUB-01",
-        Excluded("get_oc_act — Publikationsschicht, noch nicht projizierte Tranche"),
-    ),
-    ("JLX-PUB-02", Excluded("get_memorial — dito")),
-    ("JLX-PUB-03", Excluded("get_fga_documents — dito")),
-    (
-        "JLX-GEN-01",
-        Excluded("get_drafts — Entstehungsgeschichte, kein gutachtenkritischer Pfad"),
-    ),
-    ("JLX-GEN-02", Excluded("get_consultations — dito")),
-    ("JLX-GEN-03", Excluded("get_consultation_documents — dito")),
-    (
-        "JLX-TRT-01",
-        Excluded("get_treaty_info — Staatsverträge, eigene spätere Tranche"),
-    ),
-    ("JLX-TRT-02", Excluded("find_treaties — dito")),
-    (
-        "JLX-VOC-01",
-        Excluded("resolve_vocabulary_term — kontrolliertes Vokabular, kein Agenten-Bedarf"),
-    ),
-    ("JLX-VOC-02", Excluded("list_vocabulary — dito")),
-    ("JLX-VOC-03", Excluded("explore_node — dito")),
-    // ----- AKN (20): 11 projiziert / 9 ausgeschlossen -----
+    ("JLX-PUB-01", Projected("get_oc_act")),
+    ("JLX-PUB-02", Projected("get_memorial")),
+    ("JLX-PUB-03", Projected("get_fga_documents")),
+    ("JLX-GEN-01", Projected("get_drafts")),
+    ("JLX-GEN-02", Projected("get_consultations")),
+    ("JLX-GEN-03", Projected("get_consultation_documents")),
+    ("JLX-TRT-01", Projected("get_treaty_info")),
+    ("JLX-TRT-02", Projected("find_treaties")),
+    ("JLX-VOC-01", Projected("resolve_vocabulary_label")),
+    ("JLX-VOC-02", Projected("list_vocabulary")),
+    ("JLX-VOC-03", Projected("explore_node")),
+    // ----- AKN (20): 13 projiziert / 7 ausgeschlossen -----
     (
         "AKN-DOC-01",
         Excluded("fetch_akn_document — produktive Bridge-Komposition, interner Fetch"),
@@ -180,15 +162,9 @@ const MATRIX: &[(&str, Projection)] = &[
     ("AKN-TXT-03", Projected("read_document")),
     ("AKN-TXT-04", Projected("search_text")),
     ("AKN-MOD-01", Projected("get_modifications")),
-    (
-        "AKN-MOD-02",
-        Excluded("G-2: Nutzwert-Lücke, zurückgestellt"),
-    ),
+    ("AKN-MOD-02", Projected("extract_change_notes")),
     ("AKN-REF-01", Projected("get_references")),
-    (
-        "AKN-REF-02",
-        Excluded("G-2: Nutzwert-Lücke, zurückgestellt"),
-    ),
+    ("AKN-REF-02", Projected("parse_unlinked_ref")),
     ("AKN-CMP-01", Projected("list_components")),
     (
         "AKN-CMP-02",
@@ -391,8 +367,8 @@ fn lexicon_and_tool_projection_are_consistent() {
     );
 
     // --- Assertion 4: Zähl-Invariante (Doku-Anker) ---
-    // 47 Lexikon-IDs: 24 projiziert / 23 ausgeschlossen; + 1 Composite ohne
-    // Lexikon-Primitiv ⇒ 25 registrierte MCP-Tools.
+    // 47 Lexikon-IDs: 39 projiziert / 8 ausgeschlossen; + 1 Composite ohne
+    // Lexikon-Primitiv ⇒ 40 registrierte MCP-Tools.
     let projected_count = MATRIX
         .iter()
         .filter(|(_, p)| matches!(p, Projected(_)))
@@ -402,18 +378,18 @@ fn lexicon_and_tool_projection_are_consistent() {
         .filter(|(_, p)| matches!(p, Excluded(_)))
         .count();
     assert_eq!(
-        projected_count, 24,
-        "erwartet 24 projizierte Lexikon-Primitive"
+        projected_count, 39,
+        "erwartet 39 projizierte Lexikon-Primitive"
     );
     assert_eq!(
-        excluded_count, 23,
-        "erwartet 23 ausgeschlossene Lexikon-Primitive"
+        excluded_count, 8,
+        "erwartet 8 ausgeschlossene Lexikon-Primitive"
     );
     assert_eq!(COMPOSITE_TOOLS.len(), 1, "erwartet genau 1 Composite-Tool");
     assert_eq!(
         registered.len(),
-        25,
-        "erwartet 25 registrierte MCP-Tools (24 projiziert + 1 Composite)"
+        40,
+        "erwartet 40 registrierte MCP-Tools (39 projiziert + 1 Composite)"
     );
 
     // --- Assertion 5: Pool-Zuordnung stimmt mit der Matrix-Prosa überein ---

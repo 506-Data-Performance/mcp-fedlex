@@ -45,8 +45,9 @@ use async_trait::async_trait;
 use fedlex_core::{Eli, Response};
 use fedlex_jolux::{
     CitationDirection, JoluxError, Language, SparqlClient, check_in_force, get_article_history,
-    get_citations, get_impacts, get_outgoing_impacts, get_subdivisions, get_taxonomy, list_annexes,
-    list_versions, resolve_consolidation_at,
+    get_citations, get_drafts, get_fga_documents, get_impacts, get_law_metadata, get_memorial,
+    get_oc_act, get_outgoing_impacts, get_subdivisions, get_taxonomy, list_annexes,
+    list_expressions, list_versions, resolve_consolidation_at,
 };
 
 use serde_json::{Value, json};
@@ -90,7 +91,26 @@ where
     registry.register(Arc::new(GetSubdivisions {
         client: Arc::clone(&client),
     }));
-    registry.register(Arc::new(ListAnnexes { client }));
+    registry.register(Arc::new(ListAnnexes {
+        client: Arc::clone(&client),
+    }));
+    // Tranche D + interne Steckbriefe, projiziert 2026-07-02 (ADR-010).
+    registry.register(Arc::new(GetLawMetadata {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(ListExpressions {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetOcAct {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetMemorial {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetFgaDocuments {
+        client: Arc::clone(&client),
+    }));
+    registry.register(Arc::new(GetDrafts { client }));
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +588,230 @@ where
 // ---------------------------------------------------------------------------
 // Tests — MockSparqlClient, kein Netzwerk.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tranche D & Steckbriefe (projiziert 2026-07-02, ADR-010)
+// ---------------------------------------------------------------------------
+
+/// JLX-RES-03. Steckbrief eines Erlasses (Titel, Abkürzung, SR, Status, Daten).
+struct GetLawMetadata<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetLawMetadata<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_law_metadata"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "JOLux-Steckbrief eines Erlasses (JLX-RES-03): Titel, Abkuerzung, SR-Nummer, Status, Daten. Liefert einen BELEG (kind=norm) ueber den genannten Erlass.",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let resp = get_law_metadata(self.client.as_ref(), &eli, ctx.stamp.valid_as_of())
+            .await
+            .map_err(map_jolux)?;
+        into_value_response(resp)
+    }
+}
+
+/// JLX-RES-05. Sprachvarianten (Expressions) einer Konsolidierung.
+struct ListExpressions<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for ListExpressions<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "list_expressions"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Listet die verfuegbaren Sprachvarianten einer Konsolidierung (JLX-RES-05) — pruefe damit VOR read_article, ob eine Sprache (z.B. rm) existiert. Liefert einen BELEG (kind=norm).",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI der Konsolidierung oder des Erlasses" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let languages = list_expressions(self.client.as_ref(), &eli)
+            .await
+            .map_err(map_jolux)?;
+        let prov = ctx.stamp.into_provenance(eli);
+        Ok(Response::new(json!({ "languages": languages }), prov))
+    }
+}
+
+/// JLX-PUB-01. Publikation in der Amtlichen Sammlung (AS) zum Erlass.
+struct GetOcAct<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetOcAct<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_oc_act"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Publikation eines Erlasses in der Amtlichen Sammlung (AS/RO, JLX-PUB-01): AS-ELI, Publikationsdatum. Liefert einen BELEG (kind=norm).",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let resp = get_oc_act(self.client.as_ref(), &eli, ctx.stamp.valid_as_of())
+            .await
+            .map_err(map_jolux)?;
+        into_value_response(resp)
+    }
+}
+
+/// JLX-PUB-02. Memorial-Eintraege (AS-Band/Heft) einer AS-Publikation.
+struct GetMemorial<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetMemorial<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_memorial"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Memorial-Angaben (Band/Heft/Seiten) zu einer AS-Publikation (JLX-PUB-02). ELI stammt typischerweise aus get_oc_act. Liefert einen BELEG (kind=norm).",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI der AS-Publikation (oc), z.B. eli/oc/2017/762" },
+                "limit": { "type": "integer", "default": 20, "maximum": 50 }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let limit = args
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(20)
+            .clamp(1, 50) as u32;
+        let memorial = get_memorial(self.client.as_ref(), &eli, limit)
+            .await
+            .map_err(map_jolux)?;
+        let prov = ctx.stamp.into_provenance(eli);
+        let data = serde_json::to_value(memorial)
+            .map_err(|e| ToolError::Upstream(format!("serialize: {e}")))?;
+        Ok(Response::new(data, prov))
+    }
+}
+
+/// JLX-PUB-03. Bundesblatt-Dokumente (FGA/BBl) zum Erlass.
+struct GetFgaDocuments<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetFgaDocuments<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_fga_documents"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Bundesblatt-Dokumente (FGA/BBl) zu einem Erlass (JLX-PUB-03), z.B. Botschaften. Liefert einen BELEG (kind=norm).",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let resp = get_fga_documents(self.client.as_ref(), &eli, ctx.stamp.valid_as_of())
+            .await
+            .map_err(map_jolux)?;
+        into_value_response(resp)
+    }
+}
+
+/// JLX-GEN-01. Gesetzgebungs-Entwuerfe (Drafts) zum Erlass.
+struct GetDrafts<C> {
+    client: Arc<C>,
+}
+
+#[async_trait]
+impl<C> McpTool for GetDrafts<C>
+where
+    C: SparqlClient + Send + Sync,
+{
+    fn name(&self) -> &str {
+        "get_drafts"
+    }
+    fn pool(&self) -> ToolPool {
+        ToolPool::JoluxMetadata
+    }
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "description": "Gesetzgebungs-Entwuerfe (Drafts) zu einem Erlass (JLX-GEN-01) — Einstieg in die Entstehungsgeschichte; Draft-URIs fuehren zu get_consultations. Liefert einen BELEG (kind=norm).",
+            "properties": {
+                "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
+            },
+            "required": ["eli"]
+        })
+    }
+    async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
+        let eli = arg_eli(&args)?;
+        let resp = get_drafts(self.client.as_ref(), &eli, ctx.stamp.valid_as_of())
+            .await
+            .map_err(map_jolux)?;
+        into_value_response(resp)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1150,5 +1394,29 @@ mod tests {
             )
             .await;
         assert!(out["error"].as_str().unwrap().contains("not permitted"));
+    }
+
+    /// ADR-010-Abnahme: `list_expressions` (roher Primitiv-Typ) trägt
+    /// Norm-Provenance des angefragten Erlasses.
+    #[tokio::test]
+    async fn list_expressions_carries_norm_provenance() {
+        let json = r#"{
+          "head": { "vars": ["lang"] },
+          "results": { "bindings": [
+            { "lang": { "type": "literal", "value": "de" } },
+            { "lang": { "type": "literal", "value": "fr" } }
+          ] }
+        }"#;
+        let registry = registry_with(json);
+        let result = registry
+            .dispatch(
+                &ctx(Role::Navigator),
+                "list_expressions",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "norm");
+        assert_eq!(result["provenance"]["eli"], "eli/cc/2017/762");
+        assert!(result["data"]["languages"].is_array());
     }
 }

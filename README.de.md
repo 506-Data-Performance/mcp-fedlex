@@ -25,7 +25,7 @@ Zugriff auf konsolidiertes Bundesrecht, statt es frei formulieren zu lassen:
   **Norm-Beleg** (`kind: "norm"`) vs. ein **Discovery-Hinweis** (`kind: "hint"`,
   Kandidat — *kein* Beleg), sodass ein Reasoner einen Treffer nie versehentlich
   als belegte Norm verbucht.
-- 🔒 **Least-Privilege-RBAC** — 25 Werkzeuge in vier aktiven Pools, nach Rolle
+- 🔒 **Least-Privilege-RBAC** — 40 Werkzeuge in vier aktiven Pools, nach Rolle
   gefiltert (Reader ⊆ Navigator ⊆ Validator). Identität stammt immer aus dem
   geprüften Credential, nie aus einem LLM-Parameter.
 - 🧯 **Mandantentrennung & Quota** — pro Token serverseitig durchgesetzt
@@ -44,23 +44,23 @@ Zugriff auf konsolidiertes Bundesrecht, statt es frei formulieren zu lassen:
 
 ## Was er kann
 
-25 Werkzeuge in vier aktiven Pools, RBAC-gefiltert (Reader ⊆ Navigator ⊆ Validator).
+40 Werkzeuge in vier aktiven Pools, RBAC-gefiltert (Reader ⊆ Navigator ⊆ Validator).
 Der **Reader** sieht nur `LocalNavigation`; **Navigator** (so läuft ansV) zusätzlich
 `Discovery` und `JoluxMetadata`; **Validator** zusätzlich `Validation`.
 
-**Navigation im Erlasstext (AKN, Pool `LocalNavigation`, 11 Tools)**
+**Navigation im Erlasstext (AKN, Pool `LocalNavigation`, 13 Tools)**
 `read_article` · `read_element` · `read_document` · `get_structure` · `search_text`
 · `get_metadata` · `get_references` · `get_modifications` · `list_components`
-· `extract_tables` · `detect_foreign_content`.
+· `extract_tables` · `detect_foreign_content` · `extract_change_notes` · `parse_unlinked_ref`.
 
-**Auffinden von Erlassen (Pool `Discovery`, 3 Tools)**
-`search_law` · `resolve_sr_number` · `find_related_topic`. Treffer tragen
+**Auffinden von Erlassen (Pool `Discovery`, 10 Tools)**
+`search_law` · `resolve_sr_number` · `find_related_topic` · `find_treaties` · `get_treaty_info` · `get_consultations` · `get_consultation_documents` · `resolve_vocabulary_label` · `list_vocabulary` · `explore_node`. Treffer tragen
 **Hinweis-Provenance** (`kind: "hint"`) — Kandidaten, kein Norm-Beleg.
 
-**Metadaten & Beziehungen (JOLux, Pool `JoluxMetadata`, 10 Tools)**
+**Metadaten & Beziehungen (JOLux, Pool `JoluxMetadata`, 16 Tools)**
 `check_in_force` · `list_versions` · `resolve_consolidation_at` · `get_impacts` ·
 `get_outgoing_impacts` · `get_article_history` · `get_citations` · `get_taxonomy` ·
-`get_subdivisions` · `list_annexes`.
+`get_subdivisions` · `list_annexes` · `get_law_metadata` · `list_expressions` · `get_oc_act` · `get_memorial` · `get_fga_documents` · `get_drafts`.
 
 **Validierung (Pool `Validation`, 1 Tool)**
 `compare_versions` (Versionsvergleich, nur Validator).
