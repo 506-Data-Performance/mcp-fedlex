@@ -77,10 +77,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?,
         Err(_) => FETCHER_CACHE_MAX_BYTES,
     };
+    let xml_max_bytes = match std::env::var("MCP_XML_MAX_BYTES") {
+        Ok(raw) => raw
+            .parse()
+            .map_err(|_| format!("MCP_XML_MAX_BYTES muss eine Byte-Zahl sein, war {raw:?}"))?,
+        Err(_) => fedlex_bridge::xml_source::DEFAULT_MAX_XML_BYTES,
+    };
     let fetcher = Arc::new(AknFetcher::new(
         sparql.clone(),
         BreakeredXml::new(
-            HttpXmlSource::with_timeouts(timeouts)?,
+            HttpXmlSource::with_timeouts(timeouts)?.with_max_bytes(xml_max_bytes),
             BreakerConfig::default(),
         ),
         cache_max_bytes,

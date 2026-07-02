@@ -21,4 +21,8 @@ pub enum BridgeError {
     /// Startfehler der Komposition, kein Laufzeitfehler.
     #[error("HTTP-Client-Konfiguration ungueltig: {0}")]
     Config(String),
+    /// Interner Ausführungsfehler (z.B. abgestürzter Parse-Task) — sollte
+    /// nie auftreten, wird aber nicht verschluckt.
+    #[error("interner Fehler: {0}")]
+    Internal(String),
 }

@@ -14,6 +14,7 @@
 | `REDIS_URL` | nein | `redis://127.0.0.1:6379` | Quota-Backend (verteiltes Token-Bucket). Bei aktiviertem mTLS **muss** das Schema `rediss://` sein. |
 | `MCP_REDIS_OP_TIMEOUT_MS` | nein | `2000` | Zeitgrenze pro Redis-Operation (67 §H-4). Ein *hängendes* Redis fällt so fail-closed in den pod-lokalen Fallback-Bucket, statt den Request-Pfad zu blockieren. Unparsebare Werte brechen den Start hart ab. |
 | `MCP_FETCHER_CACHE_MAX_BYTES` | nein | `268435456` (256 MB) | Byte-Budget des Manifestations-Caches (Summe der XML-Größen, 67 §H-5). Eviction gewichtsbasiert (TinyLFU) statt zählbasiert. |
+| `MCP_XML_MAX_BYTES` | nein | `33554432` (32 MB) | Obergrenze eines einzelnen XML-Downloads (67 §H-6). Greift beim angekündigten `Content-Length` **und** als Kappung im Stream. |
 
 ## 1a. Upstream-Zeitgrenzen (67 §H-1)
 

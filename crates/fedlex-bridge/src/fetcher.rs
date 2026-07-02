@@ -78,7 +78,15 @@ impl<C: SparqlClient, S: XmlSource + 'static> AknFetcher<C, S> {
             .try_get_with(url, async move {
                 let xml = source.fetch(&init_url).await?;
                 let size = u32::try_from(xml.len()).unwrap_or(u32::MAX);
-                let doc = Arc::new(AknDocument::parse(&xml)?);
+                // CPU-gebundener Parse (roxmltree, 1–10 MB) läuft auf dem
+                // Blocking-Pool statt den Runtime-Worker zu blockieren
+                // (67 §H-6).
+                let doc =
+                    tokio::task::spawn_blocking(move || AknDocument::parse(&xml).map(Arc::new))
+                        .await
+                        .map_err(|e| {
+                            BridgeError::Internal(format!("Parse-Task abgebrochen: {e}"))
+                        })??;
                 Ok::<_, BridgeError>((doc, size))
             })
             .await

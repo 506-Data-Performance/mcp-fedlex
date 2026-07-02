@@ -18,10 +18,17 @@ pub trait XmlSource: Send + Sync {
     async fn fetch(&self, url: &str) -> Result<String, BridgeError>;
 }
 
+/// Default-Obergrenze eines XML-Downloads (67 §H-6).
+///
+/// Konsolidierte Erlasse sind 1–10 MB; 32 MB sind großzügig, aber endlich —
+/// ohne Grenze lädt `fetch` beliebig große Bodies in einen `String`.
+pub const DEFAULT_MAX_XML_BYTES: u64 = 32 * 1024 * 1024;
+
 /// Produktions-Quelle über HTTP (`fedlex.data.admin.ch/filestore/...`).
 #[derive(Debug, Clone)]
 pub struct HttpXmlSource {
     http: reqwest::Client,
+    max_bytes: u64,
 }
 
 impl HttpXmlSource {
@@ -35,13 +42,22 @@ impl HttpXmlSource {
     pub fn with_timeouts(timeouts: HttpTimeouts) -> Result<Self, BridgeError> {
         Ok(Self {
             http: timeouts.client()?,
+            max_bytes: DEFAULT_MAX_XML_BYTES,
         })
+    }
+
+    /// Setzt die Download-Obergrenze (Default [`DEFAULT_MAX_XML_BYTES`]).
+    pub fn with_max_bytes(mut self, max_bytes: u64) -> Self {
+        self.max_bytes = max_bytes;
+        self
     }
 }
 
 #[async_trait]
 impl XmlSource for HttpXmlSource {
     async fn fetch(&self, url: &str) -> Result<String, BridgeError> {
+        use futures_util::StreamExt;
+
         let resp = self
             .http
             .get(url)
@@ -54,9 +70,34 @@ impl XmlSource for HttpXmlSource {
                 resp.status()
             )));
         }
-        resp.text()
-            .await
-            .map_err(|e| BridgeError::Download(e.to_string()))
+
+        // Größen-Guard (67 §H-6): erst der angekündigte Content-Length,
+        // dann die tatsächliche Stream-Summe — beides gegen `max_bytes`.
+        if let Some(len) = resp.content_length()
+            && len > self.max_bytes
+        {
+            return Err(BridgeError::Download(format!(
+                "XML zu gross: {len} Bytes angekuendigt, Limit {} (MCP_XML_MAX_BYTES)",
+                self.max_bytes
+            )));
+        }
+
+        let mut buf: Vec<u8> = Vec::new();
+        let mut stream = resp.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| BridgeError::Download(e.to_string()))?;
+            if (buf.len() + chunk.len()) as u64 > self.max_bytes {
+                return Err(BridgeError::Download(format!(
+                    "XML zu gross: ueber {} Bytes empfangen, Limit {} (MCP_XML_MAX_BYTES)",
+                    buf.len() + chunk.len(),
+                    self.max_bytes
+                )));
+            }
+            buf.extend_from_slice(&chunk);
+        }
+
+        String::from_utf8(buf)
+            .map_err(|e| BridgeError::Download(format!("XML ist kein UTF-8: {e}")))
     }
 }
 

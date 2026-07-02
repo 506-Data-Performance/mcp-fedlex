@@ -16,6 +16,11 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **XML-Pfad entkoppelt und begrenzt (67 §H-6):** Der CPU-gebundene
+  AKN-Parse (roxmltree, 1–10 MB) läuft in `spawn_blocking` statt auf dem
+  Runtime-Worker; der XML-Download hat eine Obergrenze (`MCP_XML_MAX_BYTES`,
+  Default 32 MB), die beim angekündigten `Content-Length` und als Kappung im
+  Stream greift. Abnahme: drei Tests in `tests/xml_limits.rs`.
 - **Manifestations-Cache: Single-Flight + Byte-Budget (67 §H-5):** N parallele
   Misses auf dieselbe Manifestation lösen jetzt genau **einen** Download+Parse
   aus (`try_get_with`; Fehler werden nicht gecacht und strukturerhaltend an
