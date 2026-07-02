@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use fedlex_bridge::{AknFetcher, HttpSparqlClient, HttpTimeouts, HttpXmlSource};
-use mcp_reader::app::{app, serve};
+use mcp_reader::app::{RequestLimits, app, serve};
 use mcp_reader::auth::{AuthResolver, JwksAuthResolver, JwtAuthResolver, StaticAuthResolver};
 use mcp_reader::discovery::register_discovery_tools;
 use mcp_reader::health::HealthState;
@@ -98,8 +98,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Marke. Erst danach meldet startupz die Bereitschaft.
     health.mark_started();
 
-    serve(listener, app(service, Arc::clone(&health))).await?;
+    let limits = request_limits_from_env()?;
+    serve(listener, app(service, Arc::clone(&health), limits)).await?;
     Ok(())
+}
+
+/// Liest den Lastschutz der MCP-Routen aus der Umgebung (67 §H-2).
+///
+/// MCP_REQUEST_TIMEOUT_MS (Default 30000) und MCP_MAX_CONCURRENT_REQUESTS
+/// (Default 256). Unparsebare Werte brechen den Start hart ab.
+fn request_limits_from_env() -> Result<RequestLimits, Box<dyn std::error::Error>> {
+    let defaults = RequestLimits::default();
+    let timeout = match std::env::var("MCP_REQUEST_TIMEOUT_MS") {
+        Ok(raw) => std::time::Duration::from_millis(raw.parse().map_err(|_| {
+            format!("MCP_REQUEST_TIMEOUT_MS muss eine Millisekunden-Zahl sein, war {raw:?}")
+        })?),
+        Err(_) => defaults.timeout,
+    };
+    let max_concurrent = match std::env::var("MCP_MAX_CONCURRENT_REQUESTS") {
+        Ok(raw) => raw.parse().map_err(|_| {
+            format!("MCP_MAX_CONCURRENT_REQUESTS muss eine positive Zahl sein, war {raw:?}")
+        })?,
+        Err(_) => defaults.max_concurrent,
+    };
+    Ok(RequestLimits {
+        timeout,
+        max_concurrent,
+    })
 }
 
 /// Liest die Upstream-Zeitgrenzen aus der Umgebung.

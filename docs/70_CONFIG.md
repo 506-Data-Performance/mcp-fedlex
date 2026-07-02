@@ -24,6 +24,19 @@ binden. **Unparsebare Werte brechen den Start hart ab** (kein stiller Default be
 | `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` | nein | `3000` | Zeitgrenze für den TCP/TLS-Verbindungsaufbau zu Upstreams (Millisekunden). |
 | `MCP_UPSTREAM_TIMEOUT_MS` | nein | `15000` | Zeitgrenze für den gesamten Upstream-Request inkl. Body (Millisekunden). Fedlex-SPARQL braucht für komplexe Queries mehrere Sekunden — großzügig, aber endlich wählen. |
 
+## 1b'. Lastschutz der MCP-Routen (67 §H-2)
+
+Die MCP-Routen (`/mcp`, `/rpc`, `/sse`) laufen hinter einem Timeout- und Concurrency-Layer;
+Überlast wird sofort abgeworfen (HTTP 503 + `Retry-After`), gerissene Zeitgrenzen enden als
+HTTP 504 mit lenkendem Hinweis. Die Health-Endpunkte liegen bewusst **ausserhalb** des
+Schutzes — Probes müssen gerade unter Last antworten. **Unparsebare Werte brechen den
+Start hart ab.**
+
+| Variable | Pflicht | Default | Beschreibung |
+| --- | --- | --- | --- |
+| `MCP_REQUEST_TIMEOUT_MS` | nein | `30000` | Harte Zeitgrenze pro MCP-Request (Backstop **über** den Upstream-Timeouts aus §1a). |
+| `MCP_MAX_CONCURRENT_REQUESTS` | nein | `256` | Maximal gleichzeitig bearbeitete MCP-Requests pro Pod; alles darüber wird sofort mit 503 abgeworfen (Fail-Fast statt unsichtbarer Warteschlange). |
+
 ## 1b. Protokoll-Negotiation (ADR-008 · Quelle: `src/protocol.rs`)
 
 Der `initialize`-Handshake handelt die MCP-Protokollversion aus. Nennt der Client eine

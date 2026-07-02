@@ -16,6 +16,13 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Lastschutz am Router (67 §H-2):** Die MCP-Routen laufen hinter
+  Timeout- (`MCP_REQUEST_TIMEOUT_MS`, Default 30 s) und Concurrency-Layer
+  (`MCP_MAX_CONCURRENT_REQUESTS`, Default 256, Load-Shedding). Zeitüberschreitung
+  → HTTP 504, Überlast → HTTP 503 + `Retry-After`, beide mit lenkendem
+  `{error, hint}`-Body. Health-Probes bleiben bewusst ausserhalb des Schutzes
+  (Pod darf unter Last nicht von Kubernetes gekillt werden). Abnahme: drei
+  Tests in `app.rs` (Timeout kappt, Überlast shedded, `/livez` unter Volllast).
 
 ## [0.2.0] - 2026-06-21
 
