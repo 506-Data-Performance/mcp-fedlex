@@ -7,6 +7,18 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Verdrahtungsruinen entfernt (67 §W-1/W-2):** Die fünf vorgebauten, nie an
+  den Live-Pfad angeschlossenen Reader-Module sind gelöscht — `xml_engine`
+  (Stub-Parser; Single-Flight-Idee lebt produktiv im Fetcher, H-5; das
+  `diff_to_markdown`-Duplikat zu `compare_versions` entfällt damit),
+  `sandbox` (Muster lebt produktiv als `spawn_blocking` im Fetcher, H-6),
+  `warmup`, `lod_gateway` und `semantic_client` (Git vergisst nichts; die
+  reservierten RBAC-Pools `LodFederation`/`Workspace` bleiben dokumentiert,
+  s. 90_AUTH_AND_ROLES §3). Grundsatz: kein exportiertes Modul ohne
+  produktiven Nutzer.
+
 ### Added
 
 - **Upstream-Timeouts (67 §H-1):** Alle ausgehenden HTTP-Clients (Fedlex-SPARQL,

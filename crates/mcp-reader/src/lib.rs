@@ -24,7 +24,6 @@ pub mod circuit_breaker;
 pub mod discovery;
 pub mod health;
 
-pub mod lod_gateway;
 pub mod metadata;
 
 pub mod probes;
@@ -32,14 +31,10 @@ pub mod protocol;
 pub mod quota;
 pub mod registry;
 pub mod resilience;
-pub mod sandbox;
-pub mod semantic_client;
 pub mod temporal;
 pub mod tool;
 pub mod tools;
 pub mod transport;
-pub mod warmup;
-pub mod xml_engine;
 
 pub use app::{app, serve};
 pub use auth::{
@@ -49,9 +44,6 @@ pub use auth::{
 pub use circuit_breaker::{BreakerConfig, BreakerError, BreakerState, CircuitBreaker};
 pub use discovery::register_discovery_tools;
 pub use health::{HealthState, ReadinessProbe, health_router};
-pub use lod_gateway::{
-    ConnectorError, EliResolver, ExternalConnector, Origin, ResolveError, Resolved,
-};
 pub use metadata::register_metadata_tools;
 
 pub use probes::{QuotaBackendProbe, SparqlProbe};
@@ -62,14 +54,8 @@ pub use protocol::{
 pub use quota::{Decision, QuotaBackend, QuotaError, QuotaPolicy, RateLimiter, RedisQuotaBackend};
 pub use registry::Registry;
 pub use resilience::{BreakeredSparql, BreakeredXml};
-pub use sandbox::{SandboxError, SearchSandbox};
-pub use semantic_client::{
-    BackendError, RawHit, ScoredHit, SearchOutcome, SemanticBackend, SemanticClient,
-};
 pub use temporal::{QueryStamp, TemporalResolver};
 pub use tool::{McpTool, ToolContext, ToolError, ToolPool, pools_for, role_allows};
 pub use tools::register_navigation_tools;
 
 pub use transport::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpService, router};
-pub use warmup::{WarmupCache, WarmupReport};
-pub use xml_engine::{Article, Document, L1Cache, Page, diff_to_markdown, paginate};

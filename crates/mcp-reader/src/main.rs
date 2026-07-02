@@ -122,8 +122,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(addr).await?;
     println!("mcp-reader lauscht auf {addr}");
 
-    // Der Aufwärmlauf ist hier noch leer. Sobald er füllt, läuft er vor dieser
-    // Marke. Erst danach meldet startupz die Bereitschaft.
+    // Kein Aufwärmlauf: Der Manifestations-Cache füllt sich lazy per
+    // Single-Flight (67 §H-5). Ein Vorwärmen häufiger Erlasse (BV/OR/ZGB)
+    // wäre ein bewusstes neues Feature, kein Restposten (67 §W-1).
     health.mark_started();
 
     let limits = request_limits_from_env()?;
