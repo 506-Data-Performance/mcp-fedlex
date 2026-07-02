@@ -103,8 +103,9 @@ Default-Deny-NetworkPolicy, lokal durch das interne compose-Netz.
 | Pfad | Zweck |
 | --- | --- |
 | `GET /livez` | Liveness — anschlagsfrei, prüft keinen Upstream. |
-| `GET /readyz` | Readiness — prüft Quota-Redis und den Fedlex-SPARQL-Endpunkt. |
-| `GET /startupz` | Startup — wird grün, sobald der (derzeit leere) Warmup durch ist. |
+| `GET /readyz` | Readiness — **kritisch**: Quota-Redis; **informativ**: Fedlex-SPARQL (Ausfall = `degraded` im Body, nicht unready; 67 §H-8). |
+| `GET /startupz` | Startup — wird grün, sobald die Komposition steht (kein Warmup; Cache füllt lazy, 67 §H-5/W-1). |
+| `GET /metrics` | Prometheus-Metriken (67 §O-2): `mcp_tool_calls_total{tool,outcome}`, `mcp_tool_call_duration_ms{tool}`, `mcp_requests_shed_total`, `mcp_requests_timed_out_total`, `mcp_quota_fallback_total`, `mcp_upstream_short_circuit_total{upstream}`. **Am Ingress nicht öffentlich routen** — nur in-cluster scrapen. |
 
 ## 5. Minimalbeispiele
 

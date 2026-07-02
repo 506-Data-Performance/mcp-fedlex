@@ -459,6 +459,22 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                 // graceful { error, hint }). Es wird unverändert als result gereicht.
                 let started = Instant::now();
                 let result = self.registry.dispatch(&ctx, name, args).await;
+                // Betriebsmetriken (67 §O-2): Rate/Fehler/Latenz je Tool.
+                // Nur der Tool-Name als Label (bounded cardinality) — nie
+                // Argumente oder Mandanten (PII-Disziplin wie im Audit-Log).
+                let outcome = if result.get("error").is_some() {
+                    "error"
+                } else {
+                    "ok"
+                };
+                metrics::counter!(
+                    "mcp_tool_calls_total",
+                    "tool" => name.to_string(),
+                    "outcome" => outcome,
+                )
+                .increment(1);
+                metrics::histogram!("mcp_tool_call_duration_ms", "tool" => name.to_string())
+                    .record(started.elapsed().as_millis() as f64);
                 // Audit-Logzeile pro Call. Damit ist server-seitig belegbar,
                 // welcher Mandant wann welche Norm in welcher Fassung gefetcht hat.
                 tracing::info!(

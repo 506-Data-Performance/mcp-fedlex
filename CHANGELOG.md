@@ -28,6 +28,14 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **`GET /metrics` (Prometheus, 67 §O-2):** Betriebszähler für Rate/Fehler/
+  Latenz je Tool (`mcp_tool_calls_total{tool,outcome}`,
+  `mcp_tool_call_duration_ms{tool}`), Lastschutz (`mcp_requests_shed_total`,
+  `mcp_requests_timed_out_total`), Quota-Degradierung
+  (`mcp_quota_fallback_total`) und Breaker-Short-Circuits
+  (`mcp_upstream_short_circuit_total{upstream}`). Labels sind bounded (nie
+  Argumente/Mandanten — PII-Disziplin wie im Audit-Log); der Endpoint liegt
+  ausserhalb des Lastschutzes und wird am Ingress nicht öffentlich geroutet.
 - **Strukturiertes Logging (67 §O-1):** `tracing` ersetzt alle 14
   `println!`/`eprintln!` — Level via `RUST_LOG`, Format via `MCP_LOG_FORMAT`
   (`text` lokal, `json` für K8s). Die Audit-Zeile pro Tool-Call läuft als

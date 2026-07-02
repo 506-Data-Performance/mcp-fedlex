@@ -58,6 +58,7 @@ impl Default for RequestLimits {
 /// im Stil der Quota-Antworten, damit Agenten sinnvoll reagieren können.
 async fn handle_limit_error(err: tower::BoxError) -> Response {
     if err.is::<tower::timeout::error::Elapsed>() {
+        metrics::counter!("mcp_requests_timed_out_total").increment(1);
         (
             StatusCode::GATEWAY_TIMEOUT,
             axum::Json(json!({
@@ -70,6 +71,7 @@ async fn handle_limit_error(err: tower::BoxError) -> Response {
             .into_response()
     } else {
         // LoadShed: Überlast — sofort abweisen, Client soll kurz warten.
+        metrics::counter!("mcp_requests_shed_total").increment(1);
         (
             StatusCode::SERVICE_UNAVAILABLE,
             [("Retry-After", "1")],
@@ -106,6 +108,25 @@ where
             .layer(TimeoutLayer::new(limits.timeout)),
     );
     protected.merge(health_router(health))
+}
+
+/// Hängt `GET /metrics` (Prometheus-Text) an eine App (67 §O-2).
+///
+/// Bewusst getrennt von [`app`]: Der Endpoint gehört wie die Health-Probes
+/// **nicht** hinter den Lastschutz und wird am Ingress **nicht** öffentlich
+/// geroutet (nur in-cluster scrapen — k3-infra routet ihn nicht).
+pub fn with_metrics_route(
+    app: Router,
+    handle: metrics_exporter_prometheus::PrometheusHandle,
+) -> Router {
+    use axum::routing::get;
+    app.route(
+        "/metrics",
+        get(move || {
+            let handle = handle.clone();
+            async move { handle.render() }
+        }),
+    )
 }
 
 /// Serviert eine fertige App am Listener bis SIGTERM/Ctrl-C (67 §H-7).
@@ -487,5 +508,35 @@ mod tests {
         let text = String::from_utf8_lossy(&response);
         assert!(text.starts_with("HTTP/1.1 200 OK"), "Antwort war: {text}");
         assert!(text.contains("\"status\":\"alive\""), "Antwort war: {text}");
+    }
+
+    /// Abnahme 67 §O-2: /metrics liefert Prometheus-Text mit den
+    /// Betriebszählern.
+    #[tokio::test]
+    async fn metrics_route_serves_prometheus_text() {
+        let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
+        let handle = recorder.handle();
+        metrics::with_local_recorder(&recorder, || {
+            metrics::counter!("mcp_tool_calls_total", "tool" => "read_article", "outcome" => "ok")
+                .increment(1);
+        });
+
+        let app = with_metrics_route(Router::new(), handle);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 65536).await.unwrap();
+        let text = String::from_utf8_lossy(&body);
+        assert!(
+            text.contains("mcp_tool_calls_total"),
+            "Prometheus-Text erwartet: {text}"
+        );
     }
 }

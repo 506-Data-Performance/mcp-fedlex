@@ -265,6 +265,7 @@ impl<B: QuotaBackend> RateLimiter<B> {
             },
             Err(_) => {
                 // Fail-closed: konservatives pod-lokales Limit statt Freischaltung.
+                metrics::counter!("mcp_quota_fallback_total").increment(1);
                 let a =
                     self.fallback
                         .try_acquire(&key, self.policy.fallback_params(), cost, now_ms);

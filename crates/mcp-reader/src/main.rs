@@ -130,7 +130,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     health.mark_started();
 
     let limits = request_limits_from_env()?;
-    serve(listener, app(service, Arc::clone(&health), limits)).await?;
+    // Prometheus-Recorder (67 §O-2). /metrics liegt neben den Health-Routen
+    // ausserhalb des Lastschutzes und wird am Ingress nicht öffentlich geroutet.
+    let metrics_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .install_recorder()
+        .map_err(|e| format!("Prometheus-Recorder nicht installierbar: {e}"))?;
+    let app = mcp_reader::app::with_metrics_route(
+        app(service, Arc::clone(&health), limits),
+        metrics_handle,
+    );
+    serve(listener, app).await?;
     Ok(())
 }
 

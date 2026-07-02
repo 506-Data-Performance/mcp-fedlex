@@ -53,7 +53,11 @@ impl<C: SparqlClient + Send + Sync> SparqlClient for BreakeredSparql<C> {
             .call(|| self.inner.query(sparql))
             .await
             .map_err(|e| match e {
-                BreakerError::Open => JoluxError::Transport(OPEN_MSG.into()),
+                BreakerError::Open => {
+                    metrics::counter!("mcp_upstream_short_circuit_total", "upstream" => "sparql")
+                        .increment(1);
+                    JoluxError::Transport(OPEN_MSG.into())
+                }
                 BreakerError::Upstream(inner) => inner,
             })
     }
@@ -88,7 +92,11 @@ impl<S: XmlSource + Send + Sync> XmlSource for BreakeredXml<S> {
             .call(|| self.inner.fetch(url))
             .await
             .map_err(|e| match e {
-                BreakerError::Open => BridgeError::Download(OPEN_MSG.into()),
+                BreakerError::Open => {
+                    metrics::counter!("mcp_upstream_short_circuit_total", "upstream" => "filestore")
+                        .increment(1);
+                    BridgeError::Download(OPEN_MSG.into())
+                }
                 BreakerError::Upstream(inner) => inner,
             })
     }
