@@ -728,9 +728,13 @@ async fn jlx_gen_03_get_consultation_documents() {
 #[ignore = "live: Netz + Fedlex-Endpoint nötig"]
 async fn jlx_trt_01_get_treaty_info() {
     let c = LiveClient::new();
-    let info = get_treaty_info(&c, "https://fedlex.data.admin.ch/eli/treaty/1852/0001")
-        .await
-        .expect("get_treaty_info live");
+    let info = get_treaty_info(
+        &c,
+        "https://fedlex.data.admin.ch/eli/treaty/1852/0001",
+        Language::De,
+    )
+    .await
+    .expect("get_treaty_info live");
     assert!(
         !info.party_countries.is_empty(),
         "Vertrag muss Vertragsparteien haben (J12.1)"
@@ -750,7 +754,7 @@ async fn jlx_trt_01_get_treaty_info() {
 #[ignore = "live: Netz + Fedlex-Endpoint nötig"]
 async fn jlx_trt_02_find_treaties() {
     let c = LiveClient::new();
-    let hits = find_treaties(&c, None, Some(true), 5)
+    let hits = find_treaties(&c, None, Some(true), 5, Language::De)
         .await
         .expect("find_treaties live");
     assert!(

@@ -316,11 +316,12 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Findet Staatsvertraege (JLX-TRT-02), optional gefiltert nach Vertragspartner-Land und Bilateralitaet. Liefert Kandidaten als HINWEISE (kind=hint), kein Beleg.",
+            "description": "Findet Staatsvertraege (JLX-TRT-02), optional gefiltert nach Vertragspartner-Land und Bilateralitaet. Treffer tragen Titel (angefragte Sprache), Prozess-URI und Signaturdatum. Liefert Kandidaten als HINWEISE (kind=hint), kein Beleg.",
             "properties": {
-                "country_uri": { "type": "string", "description": "Optionale Land-URI des Vertragspartners" },
+                "country_uri": { "type": "string", "description": "Optionale Land-URI des Vertragspartners (uri aus list_vocabulary, scheme_id=country)" },
                 "bilateral": { "type": "boolean", "description": "Nur bilaterale (true) bzw. multilaterale (false) Vertraege" },
-                "limit": { "type": "integer", "default": 20, "maximum": 50 }
+                "limit": { "type": "integer", "default": 20, "maximum": 50 },
+                "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             }
         })
     }
@@ -328,7 +329,8 @@ where
         let country = args.get("country_uri").and_then(Value::as_str);
         let bilateral = args.get("bilateral").and_then(Value::as_bool);
         let limit = arg_limit(&args);
-        let hits = find_treaties(self.client.as_ref(), country, bilateral, limit)
+        let lang = arg_lang(&args)?;
+        let hits = find_treaties(self.client.as_ref(), country, bilateral, limit, lang)
             .await
             .map_err(map_jolux)?;
         let prov = query_hint(ctx, "eli/cc")?;
@@ -355,16 +357,18 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Details eines Staatsvertrags-Prozesses (JLX-TRT-01): Partner, Daten, Status. URI stammt typischerweise aus find_treaties. Liefert einen HINWEIS (kind=hint) — belege den zugehoerigen Erlass separat.",
+            "description": "Details eines Staatsvertrags-Prozesses (JLX-TRT-01): Titel, Partner, Daten, Status. URI stammt typischerweise aus find_treaties (Feld process_uri). Liefert einen HINWEIS (kind=hint) — belege den zugehoerigen Erlass separat.",
             "properties": {
-                "uri": { "type": "string", "description": "Prozess-URI des Vertrags (aus find_treaties)" }
+                "uri": { "type": "string", "description": "Prozess-URI des Vertrags (Feld process_uri aus find_treaties)" },
+                "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de", "description": "Bevorzugte Titelsprache; fehlt sie, faellt der Titel auf andere Amtssprachen zurueck" }
             },
             "required": ["uri"]
         })
     }
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let uri = arg_str(&args, "uri")?;
-        let info = get_treaty_info(self.client.as_ref(), uri)
+        let lang = arg_lang(&args)?;
+        let info = get_treaty_info(self.client.as_ref(), uri, lang)
             .await
             .map_err(map_jolux)?;
         let prov = query_hint(ctx, "eli/cc")?;

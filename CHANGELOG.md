@@ -116,6 +116,15 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Vertragstitel (68 §C-4):** `get_treaty_info` lieferte leere Titel —
+  `jolux:titleTreaty` ist sprach-getaggt und Fedlex trägt teils **leere**
+  Sprachvarianten (live: `@en=""` am CH–DE-Vertrag 2024/0088); die Query nahm
+  blind die erste Zeile. Jetzt: Leerstring-Filter in der Query, sprach-
+  präferente Wahl (Wunschsprache → de → fr → it → en → rm), neuer optionaler
+  `lang`-Parameter an beiden Vertrags-Tools. `find_treaties`-Treffer tragen
+  den Titel jetzt direkt (vorher nur Prozess-URI + Datum → N+1-Calls pro
+  Treffer). Live gegen Fedlex verifiziert; Abnahme: 3 neue Tests in
+  `treaties.rs`.
 - **Impact-Duplikate & Leer-Kommentare (68 §C-3):** `get_article_history` und
   `get_impacts` lieferten inhaltsgleiche Zeilen doppelt (Join-Fanout über die
   gefilterte, aber nicht projizierte `?target`-Variable — live beobachtet an
