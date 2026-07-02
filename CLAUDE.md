@@ -55,7 +55,7 @@ npx -y @modelcontextprotocol/inspector --config inspector.json --server fedlex
 
 - Code: `crates/` · Architektur-Plan: `likec4/`
 - Lexika & Pläne: `docs/` (`10_LEXICON_jolux`, `11_LEXICON_akn`, `30_PLAN`, `45_GAP_ANALYSIS`, `50_ROADMAP_TO_PERFECT`)
-- Entscheidungen: `docs/adr/` (ADR-001 … ADR-008)
+- Entscheidungen: `docs/adr/` (ADR-001 … ADR-010)
 - Betrieb/Config: `docs/70_CONFIG.md` (alle Env-Vars), `docs/80_DEPLOY.md`, `docs/90_AUTH_AND_ROLES.md`
 - Lebendes Review-Register: `docs/65_REVIEW_FINDINGS.md`
 - Dev-Anleitung (maßgeblich): `CONTRIBUTING.md`
