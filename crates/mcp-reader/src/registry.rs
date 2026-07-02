@@ -75,6 +75,12 @@ impl Registry {
                         "idempotentHint": true,
                         "openWorldHint": false,
                     },
+                    // outputSchema (ADR-009): zentral, weil strukturell
+                    // erzwungen — jede Erfolgsantwort ist {data, provenance}
+                    // mit exakter Provenance-Form (ADR-004/006). `data` bleibt
+                    // bewusst tool-spezifisch untypisiert (kein handgepflegtes
+                    // Schema je Tool als nächste Drift-Quelle).
+                    "outputSchema": output_schema(),
                 })
             })
             .collect()
@@ -116,6 +122,49 @@ impl Registry {
             Err(err) => graceful(&err.to_string(), err.hint()),
         }
     }
+}
+
+/// Das gemeinsame `outputSchema` aller Tools (ADR-009): beschreibt den
+/// Erfolgsfall (`isError: false`) — Nutzdaten plus strukturell garantierte
+/// Provenance (ADR-004; `kind` unterscheidet Norm-Beleg und Discovery-Hinweis,
+/// ADR-006).
+fn output_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["data", "provenance"],
+        "properties": {
+            "data": {
+                "description": "Tool-spezifische Nutzdaten (Form siehe Tool-Beschreibung)."
+            },
+            "provenance": {
+                "type": "object",
+                "required": ["kind", "eli", "valid_as_of", "transaction_time"],
+                "properties": {
+                    "kind": { "type": "string", "enum": ["norm", "hint"] },
+                    "eli": { "type": "string" },
+                    "valid_as_of": { "type": "string", "description": "Stichtag (JJJJ-MM-TT)" },
+                    "transaction_time": { "type": "string", "description": "Abrufzeitpunkt" }
+                }
+            }
+        }
+    })
+}
+
+/// Verpackt eine Nutzlast in die `CallToolResult`-Hülle der MCP-Spec (ADR-009).
+///
+/// `structuredContent` trägt das Domänen-Objekt unverändert (`{data, provenance}`
+/// bzw. `{error, hint}` — der ADR-004-Vertrag bleibt byte-gleich, nur eine Ebene
+/// tiefer); `content[0]` dieselbe Nutzlast als serialisierten JSON-Text für
+/// Clients ohne `structuredContent`-Support. Die Hülle ist ein reines
+/// Wire-Format-Detail: `dispatch` und die Tool-Tests arbeiten auf der rohen
+/// Nutzlast, der Transport verpackt am Rand.
+pub(crate) fn call_tool_result(payload: Value, is_error: bool) -> Value {
+    let text = payload.to_string();
+    json!({
+        "content": [ { "type": "text", "text": text } ],
+        "structuredContent": payload,
+        "isError": is_error,
+    })
 }
 
 /// Baut die lenkende Fehler-Hülle für das LLM.

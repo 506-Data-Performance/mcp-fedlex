@@ -169,7 +169,7 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
 
 ## Block P — Protokoll-SOTA (MCP `2025-11-25`, additiv)
 
-### P-1 — `content[]`-Envelope + `structuredContent`/`outputSchema` 🔴 **P1** — **wartet auf Freigabe** (Breaking Change, zieht ansV & syllogismus-fedlex nach; ADR nötig)
+### P-1 — `content[]`-Envelope + `structuredContent`/`outputSchema` 🟢 (2026-07-02, freigegeben; [ADR-009](adr/ADR-009-calltoolresult-envelope.md) — Server + Baseline + smoke; Konsumenten ansV/syllogismus lesen `structuredContent` bevorzugt mit Roh-Fallback)
 - **Beleg:** `tools/call` liefert das Domänen-Objekt `{data, provenance}` **roh** als
   JSON-RPC-`result` (`transport.rs:461-473`, `registry.rs:97-104`) — weder `content[]` noch
   `structuredContent`; testverriegelt in `protocol_baseline.rs:270-296`. Generische

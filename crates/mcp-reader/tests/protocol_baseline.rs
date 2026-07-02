@@ -121,7 +121,7 @@ fn service() -> McpService<StaticAuthResolver, AllowAllQuota> {
     let fetcher = Arc::new(AknFetcher::new(
         MockSparqlClient::from_json(CONS_JSON),
         MockXmlSource::new(MINI_ACT),
-        8,
+        1024 * 1024,
     ));
     register_navigation_tools(&mut registry, fetcher);
     register_metadata_tools(
@@ -273,6 +273,18 @@ async fn tools_list_entry_shape_is_frozen() {
             entry["annotations"]["openWorldHint"], false,
             "geschlossener Fedlex-Korpus: openWorldHint=false: {entry}"
         );
+        // outputSchema (ADR-009): jede Erfolgsantwort ist {data, provenance}
+        // mit exakter Provenance-Form — zentral deklariert und verriegelt.
+        assert_eq!(
+            entry["outputSchema"]["required"],
+            serde_json::json!(["data", "provenance"]),
+            "outputSchema verlangt data+provenance: {entry}"
+        );
+        assert_eq!(
+            entry["outputSchema"]["properties"]["provenance"]["properties"]["kind"]["enum"],
+            serde_json::json!(["norm", "hint"]),
+            "Provenance-kind ist norm|hint (ADR-006): {entry}"
+        );
     }
 
     // `read_article` ist Teil des stabilen Tool-Satzes (vom Smoke-Test genutzt).
@@ -296,19 +308,40 @@ async fn tools_call_read_article_carries_structural_provenance() {
     )
     .await;
 
-    // Provenance-Gate (ADR-004): ELI aus dem FRBR-Block, plus Stichtag.
+    // Wire-Vertrag seit ADR-009: `tools/call` liefert die CallToolResult-
+    // Hülle der Spec — content[] (Text) + structuredContent (Objekt) + isError.
     assert_eq!(
-        result["provenance"]["eli"], "eli/cc/2017/762",
+        result["isError"], false,
+        "erfolgreicher tools/call traegt isError=false: {result}"
+    );
+    assert_eq!(
+        result["content"][0]["type"], "text",
+        "content[0] ist der serialisierte Text-Fallback: {result}"
+    );
+    let payload = &result["structuredContent"];
+
+    // Provenance-Gate (ADR-004): ELI aus dem FRBR-Block, plus Stichtag —
+    // unveraendert, nur eine Ebene tiefer (structuredContent).
+    assert_eq!(
+        payload["provenance"]["eli"], "eli/cc/2017/762",
         "Provenance.eli muss aus der Quelle stammen, war: {result}"
     );
     assert!(
-        !result["provenance"]["valid_as_of"].is_null(),
+        !payload["provenance"]["valid_as_of"].is_null(),
         "Provenance.valid_as_of muss gesetzt sein, war: {result}"
     );
     // Kein in-band-Fehler in der Nutzlast.
     assert!(
-        result.get("error").is_none(),
+        payload.get("error").is_none(),
         "erfolgreicher tools/call darf kein in-band error tragen: {result}"
+    );
+    // content[0].text ist exakt die serialisierte Nutzlast.
+    let text: serde_json::Value =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap())
+            .expect("content[0].text ist valides JSON");
+    assert_eq!(
+        &text, payload,
+        "Text-Content und structuredContent muessen dieselbe Nutzlast tragen"
     );
 }
 

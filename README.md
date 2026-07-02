@@ -108,7 +108,7 @@ curl -s -X POST http://localhost:8080/rpc \
       }' | jq
 ```
 
-The response contains the norm text **and** a `provenance` block (`eli`, `valid_as_of`).
+The response is a spec-compliant `CallToolResult`: `structuredContent` carries the norm text **and** a `provenance` block (`eli`, `valid_as_of`); `content[0].text` carries the same payload serialised (ADR-009).
 The optional `as_of` parameter (ISO `YYYY-MM-DD`) controls the point-in-time date;
 without it, today applies.
 

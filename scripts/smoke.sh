@@ -56,9 +56,10 @@ call=$(curl -fsS -X POST "$BASE_URL/rpc" \
        "params":{"name":"read_article",
                  "arguments":{"eli":"eli/cc/1999/404","eid":"art_1"},
                  "as_of":"2024-01-01"}}' 2>/dev/null || echo '')
-if echo "$call" | jq -e '.result.provenance.eli // .result.content // .result' >/dev/null 2>&1 \
+if echo "$call" | jq -e '.result.structuredContent.provenance.eli // .result.provenance.eli' >/dev/null 2>&1 \
+   && echo "$call" | jq -e '(.result.isError // false) | not' >/dev/null 2>&1 \
    && echo "$call" | jq -e '.error | not' >/dev/null 2>&1; then
-  green "tools/call ok, Provenance: $(echo "$call" | jq -rc '.result.provenance // "n/a"')"
+  green "tools/call ok, Provenance: $(echo "$call" | jq -rc '.result.structuredContent.provenance // .result.provenance // "n/a"')"
 else
   red "tools/call lieferte einen Fehler oder kein JSON. Roh: ${call:0:200}"
 fi

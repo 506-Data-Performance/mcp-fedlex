@@ -393,10 +393,13 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                     // auf JSON-RPC-Ebene fehlschlägt.
                     return JsonRpcResponse::ok(
                         req.response_id(),
-                        json!({
-                            "error": "missing tool name",
-                            "hint": "tools/call erwartet das Feld `name` mit dem Tool-Namen.",
-                        }),
+                        crate::registry::call_tool_result(
+                            json!({
+                                "error": "missing tool name",
+                                "hint": "tools/call erwartet das Feld `name` mit dem Tool-Namen.",
+                            }),
+                            true,
+                        ),
                     );
                 };
 
@@ -416,13 +419,15 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                     // sich selbst drosseln kann.
                     return JsonRpcResponse::ok(
                         req.response_id(),
-                        json!({
-                            "error": "rate limit exceeded",
-
-                            "hint": "Quota erschoepft, bitte vor dem naechsten Aufruf warten.",
-                            "retry_after_ms": decision.retry_after_ms,
-                            "degraded": decision.degraded,
-                        }),
+                        crate::registry::call_tool_result(
+                            json!({
+                                "error": "rate limit exceeded",
+                                "hint": "Quota erschoepft, bitte vor dem naechsten Aufruf warten.",
+                                "retry_after_ms": decision.retry_after_ms,
+                                "degraded": decision.degraded,
+                            }),
+                            true,
+                        ),
                     );
                 }
 
@@ -443,10 +448,13 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                         Err(_) => {
                             return JsonRpcResponse::ok(
                                 req.response_id(),
-                                json!({
-                                    "error": "as_of must be an ISO date (YYYY-MM-DD)",
-                                    "hint": "Stichtag im Format JJJJ-MM-TT angeben, z. B. 2024-01-01.",
-                                }),
+                                crate::registry::call_tool_result(
+                                    json!({
+                                        "error": "as_of must be an ISO date (YYYY-MM-DD)",
+                                        "hint": "Stichtag im Format JJJJ-MM-TT angeben, z. B. 2024-01-01.",
+                                    }),
+                                    true,
+                                ),
                             );
                         }
                     },
@@ -487,7 +495,13 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                         started.elapsed().as_millis() as u64,
                     )
                 );
-                JsonRpcResponse::ok(req.response_id(), result)
+                // Wire-Verpackung am Rand (ADR-009): Audit/Metrik arbeiten auf
+                // der rohen Nutzlast, der Draht trägt die CallToolResult-Hülle.
+                let is_error = result.get("error").is_some();
+                JsonRpcResponse::ok(
+                    req.response_id(),
+                    crate::registry::call_tool_result(result, is_error),
+                )
             }
 
             other => JsonRpcResponse::err(
@@ -984,9 +998,18 @@ mod tests {
             )
             .await;
         let result = resp.result.unwrap();
+        // Wire-Vertrag seit ADR-009: die CallToolResult-Hülle trägt die
+        // Nutzlast strukturiert UND als serialisierten Text-Content.
+        assert_eq!(result["isError"], false);
+        assert_eq!(result["content"][0]["type"], "text");
+        let payload = &result["structuredContent"];
         // Das Provenance-Gate trägt strukturell bis ins Wire-Format.
-        assert_eq!(result["data"]["text"], "Art. 1 BV");
-        assert_eq!(result["provenance"]["eli"], "eli/cc/1999/404");
+        assert_eq!(payload["data"]["text"], "Art. 1 BV");
+        assert_eq!(payload["provenance"]["eli"], "eli/cc/1999/404");
+        // content[0].text ist dieselbe Nutzlast, serialisiert.
+        let text: Value =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(&text, payload);
         assert_eq!(resp.id, json!(7));
     }
 
@@ -1034,10 +1057,13 @@ mod tests {
                 0,
             )
             .await;
-        // Kein Transport-Fehler. Eine lenkende Antwort mit Wartehinweis.
+        // Kein Transport-Fehler. Eine lenkende Antwort mit Wartehinweis —
+        // seit ADR-009 als Tool-Execution-Error in der Spec-Hülle.
         let result = resp.result.unwrap();
-        assert_eq!(result["error"], "rate limit exceeded");
-        assert!(result["retry_after_ms"].as_i64().unwrap() > 0);
+        assert_eq!(result["isError"], true);
+        let payload = &result["structuredContent"];
+        assert_eq!(payload["error"], "rate limit exceeded");
+        assert!(payload["retry_after_ms"].as_i64().unwrap() > 0);
     }
 
     #[tokio::test]
@@ -1063,15 +1089,20 @@ mod tests {
             resp.error
         );
         let result = resp.result.expect("Tool-Execution-Error trägt ein result");
+        assert_eq!(
+            result["isError"], true,
+            "ADR-009: isError markiert den Fehler"
+        );
+        let payload = &result["structuredContent"];
         assert!(
-            result["error"]
+            payload["error"]
                 .as_str()
                 .unwrap()
                 .contains("as_of must be an ISO date"),
             "in-band error muss den as_of-Hinweis tragen: {result}"
         );
         assert!(
-            result["hint"].is_string(),
+            payload["hint"].is_string(),
             "Hinweis fürs LLM fehlt: {result}"
         );
     }
@@ -1090,15 +1121,20 @@ mod tests {
             resp.error
         );
         let result = resp.result.expect("Tool-Execution-Error trägt ein result");
+        assert_eq!(
+            result["isError"], true,
+            "ADR-009: isError markiert den Fehler"
+        );
+        let payload = &result["structuredContent"];
         assert!(
-            result["error"]
+            payload["error"]
                 .as_str()
                 .unwrap()
                 .contains("missing tool name"),
             "in-band error muss den missing-name-Hinweis tragen: {result}"
         );
         assert!(
-            result["hint"].is_string(),
+            payload["hint"].is_string(),
             "Hinweis fürs LLM fehlt: {result}"
         );
     }
