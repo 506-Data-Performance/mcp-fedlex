@@ -33,6 +33,13 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Ketten-Herkunft in den Parameter-Beschreibungen (68 §C-8):** Parameter,
+  die aus der Antwort eines anderen Tools stammen, nennen jetzt Quelle und
+  Feldname exakt (`get_treaty_info.uri` ← `find_treaties.process_uri`;
+  `get_consultations.draft_uri` ← `get_drafts.uri`;
+  `get_outgoing_impacts.eli` ← `get_oc_act.oc_uri`; `resolve_vocabulary_label`
+  akzeptiert jede Vokabular-URI aus früheren Antworten). In der
+  Dogfooding-Session kosteten die stummen Parameternamen zwei Fehlversuche.
 - **Fehler-Hints nennen das Folge-Tool (68 §C-7):** eId nicht gefunden →
   «hole die Gliederung mit `get_structure` oder finde die Stelle mit
   `search_text`»; ELI nicht gefunden → «finde den Erlass mit `search_law`

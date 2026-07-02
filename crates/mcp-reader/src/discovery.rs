@@ -390,7 +390,7 @@ where
             "type": "object",
             "description": "Vernehmlassungen zu einem Entwurf (JLX-GEN-02). Draft-URI stammt aus get_drafts. Entstehungs-Kontext als HINWEIS (kind=hint) — kein geltendes Recht.",
             "properties": {
-                "draft_uri": { "type": "string", "description": "Draft-URI (aus get_drafts)" }
+                "draft_uri": { "type": "string", "description": "Draft-URI — Feld uri aus get_drafts, Form eli/proj/JJJJ/NNNN" }
             },
             "required": ["draft_uri"]
         })
@@ -429,7 +429,7 @@ where
             "type": "object",
             "description": "Dokumente einer Vernehmlassung (JLX-GEN-03): Berichte, Stellungnahmen. Entstehungs-Kontext als HINWEIS (kind=hint) — kein geltendes Recht.",
             "properties": {
-                "consultation_uri": { "type": "string", "description": "Vernehmlassungs-URI (aus get_consultations)" }
+                "consultation_uri": { "type": "string", "description": "Vernehmlassungs-URI — Feld uri eines Treffers aus get_consultations" }
             },
             "required": ["consultation_uri"]
         })
@@ -468,7 +468,7 @@ where
             "type": "object",
             "description": "Loest die URI eines kontrollierten Vokabular-Terms zum sprachigen Label auf (JLX-VOC-01). Nachschlagewerk als HINWEIS (kind=hint).",
             "properties": {
-                "vocab_uri": { "type": "string", "description": "Term-URI, z.B. aus get_taxonomy" },
+                "vocab_uri": { "type": "string", "description": "Vokabular-URI aus einer frueheren Antwort (z.B. impact_type, status_uri, genre, type_document oder aus get_taxonomy)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["vocab_uri"]
@@ -552,7 +552,7 @@ where
             "type": "object",
             "description": "Erkundet die Nachbarschaft eines Knotens im Fedlex-Graphen (JLX-VOC-03): ein-/ausgehende Kanten. Explorations-Werkzeug als HINWEIS (kind=hint).",
             "properties": {
-                "uri": { "type": "string", "description": "Knoten-URI im Fedlex-LOD-Graphen" },
+                "uri": { "type": "string", "description": "Beliebige Fedlex-URI aus einer frueheren Antwort (ELI-, Impact-, Vokabular- oder Prozess-URI)" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 }
             },
             "required": ["uri"]

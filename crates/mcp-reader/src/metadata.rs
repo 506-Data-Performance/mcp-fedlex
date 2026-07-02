@@ -374,7 +374,7 @@ where
             "type": "object",
             "description": "Listet die Gesetze, die dieser Aenderungserlass aendert (JLX-IMP-03, Richtung umgekehrt zu get_impacts). Nur OC/FGA-Erlasse sind Impact-Quellen - als `eli` also eli/oc/... uebergeben. Mantelerlasse buendeln viele Ziele. Liefert einen BELEG (kind=norm).",
             "properties": {
-                "eli": { "type": "string", "description": "ELI des Aenderungserlasses (OC/FGA), z.B. eli/oc/2016/769" }
+                "eli": { "type": "string", "description": "ELI des Aenderungserlasses (OC/FGA), z.B. eli/oc/2016/769 — etwa oc_uri aus get_oc_act oder from aus get_impacts" }
             },
             "required": ["eli"]
         })
