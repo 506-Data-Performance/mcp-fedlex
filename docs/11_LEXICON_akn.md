@@ -220,7 +220,7 @@ Inline-Zitationen im Text. Artikel-genau — was der JOLux-Zitationsgraph (nur `
 - **Komposition:** ← AKN-DOC-01 | ⊕ JLX-CIT-01 (Merge), → JLX-RES-03 (Ziel auflösen)
 - **Status:** implementiert + konformanz-getestet (`get_all_references`, `akn_ref_01_references_eng`)
 
-### AKN-REF-02 · parse_unlinked_refs
+### AKN-REF-02 · parse_unlinked_ref
 - **Frage:** "Worauf zeigen die 15 % Refs ohne href?"
 - **Signatur:** `(ref_text, context) → { kind: Article|SrNumber|AsCitation|Unknown, parsed }`
 - **AKN:** `<ref>` ohne `@href` — Zielangabe nur im Text ("Art. 5", "101", "AS 2020 752").

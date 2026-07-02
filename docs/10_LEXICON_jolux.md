@@ -136,7 +136,7 @@ Bi-Temporalität ist das Kernversprechen. JOLux modelliert sie über Consolidati
 - **Komposition:** ← JLX-RES-03 | → JLX-TMP-02, JLX-RES-04
 - **Status:** implementiert + konformanz-getestet (`list_versions`, `jlx_tmp_01`)
 
-### JLX-TMP-02 · resolve_version_at
+### JLX-TMP-02 · resolve_consolidation_at
 - **Frage:** "Welche Fassung galt am Stichtag X?"
 - **Signatur:** `(eli, as_of) → { consolidation_eli, date_applicability }`
 - **JOLux:** `FILTER(?date <= as_of) ORDER BY DESC(?date) LIMIT 1` (J14.3)
@@ -340,7 +340,7 @@ Drafts und Vernehmlassungen. Der politische Prozess vor der Publikation (J18.3).
 
 JOLux-Werte sind opake URIs. Ohne SKOS-Auflösung ist alles andere bedeutungslos (J5.3).
 
-### JLX-VOC-01 · resolve_vocabulary_term
+### JLX-VOC-01 · resolve_vocabulary_label
 - **Frage:** "Was bedeutet `resource-type/21`?"
 - **Signatur:** `(term_uri, lang?) → { label, definition?, broader?, scheme }`
 - **JOLux:** SKOS `prefLabel`/`broader` über 46 Kataloge, 49'184 Einträge

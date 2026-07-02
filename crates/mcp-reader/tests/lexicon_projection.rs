@@ -255,9 +255,14 @@ fn tool_names_for(reg: &Registry, role: Role) -> BTreeSet<String> {
 
 /// Liest beide Lexikon-Dateien und extrahiert alle IDs (`### <ID> · <fn>`).
 fn lexicon_ids() -> BTreeSet<String> {
+    lexicon_entries().into_iter().map(|(id, _)| id).collect()
+}
+
+/// Liest beide Lexikon-Dateien und extrahiert `(ID, Funktionsname)`-Paare.
+fn lexicon_entries() -> Vec<(String, String)> {
     let root = env!("CARGO_MANIFEST_DIR");
     let re = Regex::new(r"(?m)^### ((?:JLX|AKN)-[A-Z]+-[0-9]+) · ([a-z_]+)").expect("valid regex");
-    let mut ids = BTreeSet::new();
+    let mut entries = Vec::new();
     for rel in [
         "/../../docs/10_LEXICON_jolux.md",
         "/../../docs/11_LEXICON_akn.md",
@@ -266,10 +271,47 @@ fn lexicon_ids() -> BTreeSet<String> {
         let content = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("Lexikon-Datei nicht lesbar: {path} ({e})"));
         for caps in re.captures_iter(&content) {
-            ids.insert(caps[1].to_string());
+            entries.push((caps[1].to_string(), caps[2].to_string()));
         }
     }
-    ids
+    entries
+}
+
+/// Assertion 7 (67 §T-2): Jeder im Lexikon dokumentierte **Funktionsname**
+/// existiert als Export der zugehörigen Domänen-Crate. Die bisherige Wache
+/// verglich nur IDs und verwarf die Namen — dadurch blieben zwei
+/// Doku↔Code-Namensdrifts unbemerkt (`resolve_vocabulary_term/label`,
+/// `parse_unlinked_refs/ref`). Textbasiert über die lib.rs-Quellen, wie der
+/// restliche Test doc-getrieben ist — nur jetzt in beide Richtungen.
+#[test]
+fn lexicon_function_names_exist_in_crate_exports() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let jolux = std::fs::read_to_string(format!("{root}/../fedlex-jolux/src/lib.rs"))
+        .expect("fedlex-jolux lib.rs lesbar");
+    // AKN-Primitive leben in fedlex-akn; die produktive Komposition
+    // AKN-DOC-01 (fetch_akn_document) lebt bewusst in der Bridge.
+    let akn = [
+        std::fs::read_to_string(format!("{root}/../fedlex-akn/src/lib.rs"))
+            .expect("fedlex-akn lib.rs lesbar"),
+        std::fs::read_to_string(format!("{root}/../fedlex-bridge/src/fetcher.rs"))
+            .expect("fedlex-bridge fetcher.rs lesbar"),
+    ]
+    .join("\n");
+
+    let mut missing = Vec::new();
+    for (id, fn_name) in lexicon_entries() {
+        let source = if id.starts_with("JLX-") { &jolux } else { &akn };
+        // Wortgenauer Treffer: Name gefolgt von Nicht-Identifier-Zeichen.
+        let word = Regex::new(&format!(r"\b{fn_name}\b")).expect("valid regex");
+        if !word.is_match(source) {
+            missing.push(format!("{id} · {fn_name}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "Lexikon dokumentiert Funktionen, die die Crate nicht exportiert \
+         (Namensdrift Doku↔Code): {missing:?}"
+    );
 }
 
 /// Alle Matrix-IDs als Set.
