@@ -9,17 +9,26 @@ use fedlex_core::{Response, ValidAsOf};
 use serde::{Deserialize, Serialize};
 
 /// Ein Knoten der Dokument-Gliederung.
+///
+/// Serialisierung ist bewusst schlank (68 §B-1): `None`-Felder und leere
+/// `children` werden weggelassen — bei einem mittelgrossen Erlass sparte
+/// allein das `"children":[],"heading":null`-Rauschen zehntausende Tokens
+/// im Agenten-Kontext.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutlineNode {
     /// eId, sofern vorhanden.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub eid: Option<String>,
     /// Element-Typ (`article`, `chapter`, `level`, …).
     pub kind: String,
     /// Nummer aus `<num>` (z.B. `Art. 1`).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub num: Option<String>,
     /// Überschrift aus `<heading>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub heading: Option<String>,
     /// Untergeordnete Gliederungselemente.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<OutlineNode>,
 }
 

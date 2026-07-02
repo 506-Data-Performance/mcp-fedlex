@@ -2,9 +2,10 @@
 //!
 //! Jedes Tool ist eine dünne Hülle um genau ein AKN-Primitiv aus `fedlex-akn`,
 //! gespeist durch den [`AknFetcher`] aus `fedlex-bridge` (Direct Fetch gegen
-//! Fedlex, gecached pro Manifestations-URL). Der Stichtag kommt NIE aus den
-//! Tool-Argumenten, sondern immer aus dem [`ToolContext`]-Stempel des Temporal
-//! Resolvers — so können Tools den Stichtag nicht untereinander verfälschen.
+//! Fedlex, gecached pro Manifestations-URL). Den Stichtag liest NIE ein Tool
+//! selbst aus seinen Argumenten — er kommt immer aus dem [`ToolContext`]-Stempel,
+//! den der Transport zentral setzt (`params.as_of` > `arguments.as_of`,
+//! ADR-011) — so können Tools den Stichtag nicht untereinander verfälschen.
 //!
 //! Provenance (ADR-004). Wo das Primitiv selbst ein [`Response`] liefert
 //! (TXT-01/02/03, STR-01), gilt dessen Herkunft, denn sie stammt strukturell
@@ -262,10 +263,11 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Inhaltsverzeichnis des Erlasses (AKN-STR-01). type_filter=article liefert die Artikel-Liste.",
+            "description": "Inhaltsverzeichnis des Erlasses (AKN-STR-01). Default ist das Skelett bis Artikel-Ebene (Orientierungsansicht); depth=full liefert den kompletten Baum bis auf Absatz-Ebene. type_filter=article liefert die flache Artikel-Liste.",
             "properties": {
                 "eli": { "type": "string" },
                 "type_filter": { "type": "string", "description": "Optional, z.B. article oder chapter" },
+                "depth": { "type": "string", "enum": ["article", "full"], "default": "article", "description": "article: Unterelemente von Artikeln gekappt (kompakt). full: kompletter Baum." },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["eli"]
@@ -274,10 +276,37 @@ where
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let doc = fetch(&self.fetcher, ctx, &args).await?;
         let filter = args.get("type_filter").and_then(Value::as_str);
-        let (outline, prov) = get_document_structure(doc.data(), filter, ctx.stamp.valid_as_of())
-            .map_err(map_akn)?
-            .into_parts();
+        let (mut outline, prov) =
+            get_document_structure(doc.data(), filter, ctx.stamp.valid_as_of())
+                .map_err(map_akn)?
+                .into_parts();
+        // 68 §B-1: Das Inhaltsverzeichnis ist ein Orientierungs-Tool — der
+        // volle Baum bis auf Absatz-Ebene wog live 95 KB (~24k Tokens) und
+        // erschlug genau den Kontext, dem er Überblick geben soll. Default
+        // daher Artikel-Skelett; der volle Baum bleibt per depth=full.
+        if args
+            .get("depth")
+            .and_then(Value::as_str)
+            .unwrap_or("article")
+            != "full"
+        {
+            prune_below_articles(&mut outline);
+        }
         Ok(Response::new(to_value(outline)?, prov))
+    }
+}
+
+/// Kappt die Gliederung unterhalb der Artikel-Ebene (68 §B-1) — Kapitel,
+/// Abschnitte und Artikel bleiben, Absätze/Ziffern innerhalb von Artikeln
+/// fallen weg. Auf LEVEL_BASED-Dokumenten ohne Artikel bleibt der Baum
+/// unverändert (dort tragen die Level-Überschriften die Semantik).
+fn prune_below_articles(nodes: &mut [fedlex_akn::OutlineNode]) {
+    for node in nodes.iter_mut() {
+        if node.kind == "article" {
+            node.children.clear();
+        } else {
+            prune_below_articles(&mut node.children);
+        }
     }
 }
 
@@ -385,9 +414,11 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Ganzer Erlass als lesbares Markdown (AKN-TXT-03). Für Zitate read_article/read_element nutzen.",
+            "description": "Ganzer Erlass als lesbares Markdown (AKN-TXT-03), mit Zeichen-Budget gegen Kontext-Sprengung. Für Zitate read_article/read_element nutzen; für Überblick get_structure.",
             "properties": {
                 "eli": { "type": "string" },
+                "max_chars": { "type": "integer", "default": 120000, "description": "Zeichen-Budget; darüber wird gekappt (truncated=true, Fortsetzung via offset=next_offset). 0 = unbegrenzt." },
+                "offset": { "type": "integer", "default": 0, "description": "Zeichen-Offset für Fortsetzungs-Lektüre (next_offset der vorigen Antwort)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["eli"]
@@ -398,7 +429,31 @@ where
         let (markdown, prov) = get_readable_document(doc.data(), ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(json!({ "markdown": markdown }), prov))
+        // 68 §B-1: Ein einziger read_document-Aufruf wog live 210 KB (~50k
+        // Tokens) — mehr als die meisten Agenten-Budgets für den ganzen
+        // Recherche-Schritt. Zeichen-Budget mit ehrlichem Truncation-Signal
+        // (B-2) statt stiller Vollausgabe; Fortsetzung über offset.
+        let max_chars = args
+            .get("max_chars")
+            .and_then(Value::as_u64)
+            .unwrap_or(120_000) as usize;
+        let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let total_chars = markdown.chars().count();
+        let window: String = match max_chars {
+            0 => markdown.chars().skip(offset).collect(),
+            m => markdown.chars().skip(offset).take(m).collect(),
+        };
+        let end = offset + window.chars().count();
+        let truncated = end < total_chars;
+        Ok(Response::new(
+            json!({
+                "markdown": window,
+                "total_chars": total_chars,
+                "truncated": truncated,
+                "next_offset": if truncated { Value::from(end) } else { Value::Null },
+            }),
+            prov,
+        ))
     }
 }
 
@@ -422,9 +477,11 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Alle <ref>-Verweise des Erlasses (AKN-REF-01). Fedlex-hrefs zeigen auf Work-Ebene, Stichtagsauflösung läuft über die Tools selbst.",
+            "description": "Verweise (<ref>) des Erlasses (AKN-REF-01) als Liste {references, total, truncated}. Fedlex-hrefs zeigen auf Work-Ebene, Stichtagsauflösung läuft über die Tools selbst.",
             "properties": {
                 "eli": { "type": "string" },
+                "limit": { "type": "integer", "default": 200, "description": "Max. Anzahl Verweise; total nennt die Gesamtzahl, truncated signalisiert die Kappung." },
+                "offset": { "type": "integer", "default": 0, "description": "Start-Index für Fortsetzung" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["eli"]
@@ -435,7 +492,25 @@ where
         let (refs, prov) = get_all_references(doc.data(), ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(to_value(refs)?, prov))
+        // 68 §B-1/B-2: live 82 KB an Verweisen in einem Rutsch. Listenform
+        // mit total/truncated — der Agent sieht, ob er alles hat.
+        let limit = args
+            .get("limit")
+            .and_then(Value::as_u64)
+            .unwrap_or(200)
+            .max(1) as usize;
+        let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let total = refs.len();
+        let page: Vec<_> = refs.into_iter().skip(offset).take(limit).collect();
+        let truncated = offset + page.len() < total;
+        Ok(Response::new(
+            json!({
+                "references": to_value(page)?,
+                "total": total,
+                "truncated": truncated,
+            }),
+            prov,
+        ))
     }
 }
 
@@ -988,6 +1063,77 @@ mod tests {
             .await;
         let md = out["data"]["markdown"].as_str().unwrap();
         assert!(md.contains("# Energiegesetz"));
+        // 68 §B-1: Unter dem Default-Budget → vollständig, ehrlich markiert.
+        assert_eq!(out["data"]["truncated"], false);
+        assert!(out["data"]["total_chars"].as_u64().unwrap() > 0);
+    }
+
+    /// 68 §B-1/B-2: Das Zeichen-Budget kappt ehrlich (truncated + next_offset)
+    /// und die Fortsetzung über offset liefert lückenlos den Rest.
+    #[tokio::test]
+    async fn read_document_budget_truncates_and_resumes() {
+        let reg = registry();
+        let full = reg
+            .dispatch(&ctx(), "read_document", json!({ "eli": "eli/cc/2017/762" }))
+            .await;
+        let full_md = full["data"]["markdown"].as_str().unwrap().to_string();
+        let total = full["data"]["total_chars"].as_u64().unwrap();
+
+        let first = reg
+            .dispatch(
+                &ctx(),
+                "read_document",
+                json!({ "eli": "eli/cc/2017/762", "max_chars": 10 }),
+            )
+            .await;
+        assert_eq!(first["data"]["truncated"], true);
+        assert_eq!(first["data"]["total_chars"].as_u64().unwrap(), total);
+        let next = first["data"]["next_offset"].as_u64().unwrap();
+        assert_eq!(next, 10);
+
+        let rest = reg
+            .dispatch(
+                &ctx(),
+                "read_document",
+                json!({ "eli": "eli/cc/2017/762", "offset": next, "max_chars": 0 }),
+            )
+            .await;
+        let stitched = format!(
+            "{}{}",
+            first["data"]["markdown"].as_str().unwrap(),
+            rest["data"]["markdown"].as_str().unwrap()
+        );
+        assert_eq!(stitched, full_md, "Fortsetzung muss lückenlos anschliessen");
+        assert_eq!(rest["data"]["truncated"], false);
+    }
+
+    /// 68 §B-1: Default ist das Artikel-Skelett (Absätze gekappt, leere
+    /// children-Arrays gar nicht serialisiert); depth=full liefert den Baum.
+    #[tokio::test]
+    async fn get_structure_default_is_article_skeleton() {
+        let reg = registry();
+        let skeleton = reg
+            .dispatch(&ctx(), "get_structure", json!({ "eli": "eli/cc/2017/762" }))
+            .await;
+        let top = &skeleton["data"].as_array().unwrap()[0];
+        assert_eq!(top["kind"], "article");
+        assert!(
+            top.get("children").is_none(),
+            "Artikel-Kinder müssen gekappt und leere Arrays weggelassen sein: {top}"
+        );
+
+        let full = reg
+            .dispatch(
+                &ctx(),
+                "get_structure",
+                json!({ "eli": "eli/cc/2017/762", "depth": "full" }),
+            )
+            .await;
+        let top = &full["data"].as_array().unwrap()[0];
+        assert!(
+            top["children"].as_array().is_some_and(|c| !c.is_empty()),
+            "depth=full muss die Absatz-Ebene tragen: {top}"
+        );
     }
 
     #[tokio::test]
@@ -1012,7 +1158,13 @@ mod tests {
                 json!({ "eli": "eli/cc/2017/762" }),
             )
             .await;
-        assert!(out["data"].as_array().unwrap().is_empty(), "war: {out}");
+        // 68 §B-1/B-2: Listenform mit total/truncated statt nacktem Array.
+        assert!(
+            out["data"]["references"].as_array().unwrap().is_empty(),
+            "war: {out}"
+        );
+        assert_eq!(out["data"]["total"], 0);
+        assert_eq!(out["data"]["truncated"], false);
         assert_eq!(out["provenance"]["eli"], "eli/cc/2017/762");
     }
 

@@ -33,6 +33,18 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Antwort-Budgets für die schweren Navigations-Tools (68 §B-1, löst 67 §P-5
+  für den Live-Pfad):** Live-Messung am EnG: `read_document` 210 KB,
+  `get_structure` 95 KB, `get_references` 82 KB — ein Aufruf konnte das
+  Kontext-Budget eines Agenten sprengen. Jetzt: `get_structure` liefert per
+  Default das **Artikel-Skelett** (`depth=article`; `depth=full` für den
+  ganzen Baum), leere `children`/`null`-Felder werden nicht mehr
+  serialisiert; `read_document` bekommt ein Zeichen-Budget (`max_chars`,
+  Default 120 000; `0` = unbegrenzt) mit ehrlichem `truncated`-Signal und
+  Fortsetzung über `offset`/`next_offset`; `get_references` liefert die
+  Listenform `{references, total, truncated}` mit `limit`/`offset`
+  (Default 200). Abnahme: Budget-/Fortsetzungs-Test (lückenloses Stitching),
+  Skeleton-vs-full-Test, Listenform-Test.
 - **Stichtag als Tool-Argument (68 §A-2, ADR-011):** `as_of` (JJJJ-MM-TT) wird
   jetzt auch in den `arguments` gelesen — der einzige Kanal, den ein Modell
   über einen Standard-MCP-Host erreicht. Vorher wurde es dort stillschweigend
