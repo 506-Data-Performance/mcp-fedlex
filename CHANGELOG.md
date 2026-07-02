@@ -33,6 +33,13 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **`list_vocabulary` findbar gemacht (68 §C-2):** Neuer `query`-Parameter
+  filtert serverseitig case-insensitiv über die Labels aller Sprachen
+  (`scheme_id=country, query=Deutschland` → 1 Treffer statt Liste blättern
+  und in die Kappung laufen; live verifiziert). Die gültigen Schema-
+  Kennungen sind jetzt in der Parameter-Description aufgezählt — vorher
+  stand dort nur «Schema-Kennung des Vokabulars», ohne dass irgendwo
+  dokumentiert war, welche existieren.
 - **Vokabular-Labels direkt in den Antworten (68 §C-1):** Die opaken
   Vokabular-URIs (`impact-type/1`, `enforcement-status/3`,
   `resource-type/21`, Genre-URIs) tragen jetzt ihr deutsches Label inline —

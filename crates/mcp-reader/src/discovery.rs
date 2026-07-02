@@ -527,9 +527,10 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet Konzepte eines kontrollierten Vokabulars (SKOS-Schema, JLX-VOC-02), z.B. Rechtsgebiete. Nachschlagewerk als HINWEIS (kind=hint).",
+            "description": "Listet Konzepte eines kontrollierten Vokabulars (SKOS-Schema, JLX-VOC-02). Mit query gezielt nach Label suchen (z.B. scheme_id=country, query=Deutschland → Land-URI fuer find_treaties). Nachschlagewerk als HINWEIS (kind=hint).",
             "properties": {
-                "scheme_id": { "type": "string", "description": "Schema-Kennung des Vokabulars" },
+                "scheme_id": { "type": "string", "description": "Schema-Kennung, u.a.: country, legal-taxonomy, enforcement-status, impact-type, resource-type, legal-resource-genre, treaty-type, treaty-status, consultation-status, subdivision-type, draft-document-type, legal-subject-theme-de" },
+                "query": { "type": "string", "description": "Optionaler Label-Filter, case-insensitiv ueber alle Sprachen (serverseitig)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 }
             },
@@ -540,7 +541,8 @@ where
         let scheme = arg_str(&args, "scheme_id")?;
         let lang = arg_lang(&args)?;
         let limit = arg_limit(&args);
-        let concepts = list_vocabulary(self.client.as_ref(), scheme, lang, limit)
+        let query = args.get("query").and_then(Value::as_str);
+        let concepts = list_vocabulary(self.client.as_ref(), scheme, lang, limit, query)
             .await
             .map_err(map_jolux)?;
         let items: Vec<Value> = concepts

@@ -50,12 +50,16 @@ pub const VOCABULARY_BASE: &str = "https://fedlex.data.admin.ch/vocabulary/";
 
 const LIST_VOCAB_Q: &str = r#"SELECT DISTINCT ?concept ?label WHERE {
   ?concept skos:prefLabel ?any .
-  FILTER(STRSTARTS(STR(?concept), "__SCHEME__"))
+  FILTER(STRSTARTS(STR(?concept), "__SCHEME__"))__QUERY_FILTER__
   OPTIONAL { ?concept skos:prefLabel ?label . FILTER(LANG(?label) = "__TAG__") }
 } LIMIT __LIMIT__"#;
 
-/// JLX-VOC-02: Listet alle Konzepte eines SKOS-Schemes
+/// JLX-VOC-02: Listet die Konzepte eines SKOS-Schemes
 /// (z.B. `resource-type`, `impact-type`, `enforcement-status`).
+///
+/// `query` filtert serverseitig case-insensitiv über die Labels **aller**
+/// Sprachen (68 §C-2) — «Deutschland» im 280-Länder-Vokabular finden heisst
+/// sonst: ganze Liste blättern und in die stille Kappung laufen.
 ///
 /// Achtung Definitions-/Nutzungs-Lücke (Rulebook J5.5): `enforcement-status`
 /// definiert 6 Codes, genutzt werden 3. Bei 6 Katalogen fehlt das DE-Label
@@ -65,12 +69,21 @@ pub async fn list_vocabulary(
     scheme_id: &str,
     lang: Language,
     limit: u32,
+    query: Option<&str>,
 ) -> Result<Vec<VocabularyConcept>, JoluxError> {
     let safe = scheme_id.replace(['<', '>', '"', '\\', ' ', '/'], "");
+    let query_filter = match query {
+        Some(q) if !q.trim().is_empty() => {
+            let q_safe = q.replace(['<', '>', '"', '\\'], "").to_lowercase();
+            format!("\n  FILTER(CONTAINS(LCASE(STR(?any)), \"{q_safe}\"))")
+        }
+        _ => String::new(),
+    };
     let sparql = format!(
         "{PREFIXES}{}",
         LIST_VOCAB_Q
             .replace("__SCHEME__", &format!("{VOCABULARY_BASE}{safe}/"))
+            .replace("__QUERY_FILTER__", &query_filter)
             .replace("__TAG__", lang.tag())
             .replace("__LIMIT__", &limit.to_string())
     );
@@ -215,7 +228,7 @@ mod tests {
               {"concept":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/resource-type/22"}}
             ]}}"#,
         );
-        let concepts = list_vocabulary(&client, "resource-type", Language::De, 60)
+        let concepts = list_vocabulary(&client, "resource-type", Language::De, 60, None)
             .await
             .unwrap();
         assert_eq!(concepts.len(), 2);
@@ -230,6 +243,38 @@ mod tests {
             r#"STRSTARTS(STR(?concept), "https://fedlex.data.admin.ch/vocabulary/resource-type/")"#
         ));
         assert!(q.contains("LIMIT 60"));
+        assert!(
+            !q.contains("CONTAINS(LCASE"),
+            "ohne query kein Label-Filter: {q}"
+        );
+    }
+
+    /// 68 §C-2: `query` filtert serverseitig case-insensitiv über die Labels
+    /// aller Sprachen — Injektionszeichen werden neutralisiert.
+    #[tokio::test]
+    async fn list_vocabulary_query_filters_serverside() {
+        let client = MockSparqlClient::from_json(
+            r#"{"head":{"vars":["concept","label"]},"results":{"bindings":[
+              {"concept":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/country/136"},
+               "label":{"type":"literal","xml:lang":"de","value":"Deutschland"}}
+            ]}}"#,
+        );
+        let concepts = list_vocabulary(
+            &client,
+            "country",
+            Language::De,
+            50,
+            Some(r#"Deutsch" } INJECT {"#),
+        )
+        .await
+        .unwrap();
+        assert_eq!(concepts.len(), 1);
+
+        let q = client.last_query().unwrap();
+        assert!(
+            q.contains(r#"CONTAINS(LCASE(STR(?any)), "deutsch } inject {")"#),
+            "Filter muss lowercased und neutralisiert sein: {q}"
+        );
     }
 
     #[tokio::test]

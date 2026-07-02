@@ -801,7 +801,7 @@ async fn jlx_voc_01_resolve_vocabulary_term() {
 #[ignore = "live: Netz + Fedlex-Endpoint nötig"]
 async fn jlx_voc_02_list_vocabulary() {
     let c = LiveClient::new();
-    let concepts = list_vocabulary(&c, "resource-type", Language::De, 60)
+    let concepts = list_vocabulary(&c, "resource-type", Language::De, 60, None)
         .await
         .expect("list_vocabulary live");
     assert!(
