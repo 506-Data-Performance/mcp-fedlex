@@ -114,6 +114,16 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   (Pod darf unter Last nicht von Kubernetes gekillt werden). Abnahme: drei
   Tests in `app.rs` (Timeout kappt, Überlast shedded, `/livez` unter Volllast).
 
+### Fixed
+
+- **Impact-Duplikate & Leer-Kommentare (68 §C-3):** `get_article_history` und
+  `get_impacts` lieferten inhaltsgleiche Zeilen doppelt (Join-Fanout über die
+  gefilterte, aber nicht projizierte `?target`-Variable — live beobachtet an
+  Art. 19 EnG: «zweimal geändert», tatsächlich einmal). Alle drei
+  Impact-Queries dedupen jetzt mit `SELECT DISTINCT`, dazu defensive,
+  reihenfolge-erhaltende Dedup in Rust; leere `comment`-Literale werden zu
+  `null` statt `""`. Abnahme: Duplikat-Fixture-Test in `impacts.rs`.
+
 ## [0.2.0] - 2026-06-21
 
 MCP-Protokoll-Upgrade auf die stabile Spec-Revision `2025-11-25` (ADR-008

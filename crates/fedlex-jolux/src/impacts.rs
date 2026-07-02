@@ -20,7 +20,10 @@ pub struct Impact {
     pub from: Option<String>,
 }
 
-const IMPACTS_Q: &str = r#"SELECT ?impact ?type ?date ?comment ?from WHERE {
+// DISTINCT (68 §C-3): ?target ist gefiltert, aber nicht projiziert — ein
+// Impact, der mehrere Subdivisions desselben Erlasses trifft, erzeugte sonst
+// identische Zeilen (Join-Fanout; live beobachtet an Art. 19 EnG).
+const IMPACTS_Q: &str = r#"SELECT DISTINCT ?impact ?type ?date ?comment ?from WHERE {
   ?impact jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
@@ -47,23 +50,38 @@ pub async fn get_impacts(
     let sparql = format!("{PREFIXES}{}", IMPACTS_Q.replace("__URI__", &uri));
     let res = client.query(&sparql).await?;
 
-    let impacts = res
-        .bindings()
-        .iter()
-        .filter_map(|b| {
-            let impact_uri = val(b, "impact")?.to_string();
-            Some(Impact {
-                impact_uri,
-                impact_type: val(b, "type").map(str::to_string),
-                date_entry_in_force: val(b, "date").map(str::to_string),
-                comment: val(b, "comment").map(str::to_string),
-                from: val(b, "from").map(str::to_string),
-            })
+    let impacts = dedup_impacts(res.bindings().iter().filter_map(|b| {
+        let impact_uri = val(b, "impact")?.to_string();
+        Some(Impact {
+            impact_uri,
+            impact_type: val(b, "type").map(str::to_string),
+            date_entry_in_force: val(b, "date").map(str::to_string),
+            comment: nonempty(val(b, "comment")),
+            from: val(b, "from").map(str::to_string),
         })
-        .collect();
+    }));
 
     let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
     Ok(Response::new(impacts, prov))
+}
+
+/// Leere Literale werden zu `None` — ein `comment: ""` trägt keine Information
+/// und gaukelt dem Konsumenten ein Feld vor (68 §C-3).
+fn nonempty(v: Option<&str>) -> Option<String> {
+    v.filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// Defensive Dedup zusätzlich zum SPARQL-`DISTINCT` (68 §C-3): Fedlex-Daten
+/// liefern gelegentlich inhaltsgleiche Impact-Zeilen über verschiedene
+/// Graph-Pfade. Reihenfolge-erhaltend; die Listen sind klein.
+fn dedup_impacts(iter: impl Iterator<Item = Impact>) -> Vec<Impact> {
+    let mut out: Vec<Impact> = Vec::new();
+    for imp in iter {
+        if !out.contains(&imp) {
+            out.push(imp);
+        }
+    }
+    out
 }
 
 /// Normalisiert eine AKN-eId in die JOLux-Subdivision-Schreibweise (J18.2).
@@ -72,7 +90,7 @@ pub async fn get_impacts(
 /// nur re-exportiert, damit die JOLux-API stabil bleibt.
 pub use fedlex_core::normalize_eid;
 
-const ARTICLE_HISTORY_Q: &str = r#"SELECT ?impact ?type ?date ?from ?comment WHERE {
+const ARTICLE_HISTORY_Q: &str = r#"SELECT DISTINCT ?impact ?type ?date ?from ?comment WHERE {
   ?impact jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
@@ -103,19 +121,15 @@ pub async fn get_article_history(
             .replace("__EID__", &normalized)
     );
     let res = client.query(&sparql).await?;
-    let impacts = res
-        .bindings()
-        .iter()
-        .filter_map(|b| {
-            Some(Impact {
-                impact_uri: val(b, "impact")?.to_string(),
-                impact_type: val(b, "type").map(str::to_string),
-                date_entry_in_force: val(b, "date").map(str::to_string),
-                comment: val(b, "comment").map(str::to_string),
-                from: val(b, "from").map(str::to_string),
-            })
+    let impacts = dedup_impacts(res.bindings().iter().filter_map(|b| {
+        Some(Impact {
+            impact_uri: val(b, "impact")?.to_string(),
+            impact_type: val(b, "type").map(str::to_string),
+            date_entry_in_force: val(b, "date").map(str::to_string),
+            comment: nonempty(val(b, "comment")),
+            from: val(b, "from").map(str::to_string),
         })
-        .collect();
+    }));
     let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
     Ok(Response::new(impacts, prov))
 }
@@ -133,7 +147,7 @@ pub struct OutgoingImpact {
     pub date_entry_in_force: Option<String>,
 }
 
-const OUTGOING_Q: &str = r#"SELECT ?impact ?target ?type ?date WHERE {
+const OUTGOING_Q: &str = r#"SELECT DISTINCT ?impact ?target ?type ?date WHERE {
   ?impact jolux:impactFromLegalResource ?from ;
           jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
@@ -243,6 +257,56 @@ mod tests {
         assert_eq!(normalize_eid("art_2_b/para_1"), "art_2b/para_1");
         assert_eq!(normalize_eid("art_14"), "art_14"); // Ziffern unverändert
         assert_eq!(normalize_eid("annex_1"), "annex_1");
+    }
+
+    /// 68 §C-3: inhaltsgleiche Zeilen (Join-Fanout über nicht projizierte
+    /// Filter-Variablen; live an Art. 19 EnG beobachtet) dürfen den Konsumenten
+    /// nie erreichen — weder aus der Query (DISTINCT) noch aus den Daten
+    /// (defensive Dedup). Leere comment-Literale werden zu None.
+    #[tokio::test]
+    async fn duplicate_rows_and_empty_comments_are_cleaned() {
+        let fixture_with_dupes = r#"{
+          "head": {"vars": ["impact","type","date","comment","from"]},
+          "results": {"bindings": [
+            {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a1"},
+             "date":{"type":"literal","value":"2023-01-01"},
+             "comment":{"type":"literal","value":""}},
+            {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a1"},
+             "date":{"type":"literal","value":"2023-01-01"},
+             "comment":{"type":"literal","value":""}},
+            {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a1"},
+             "date":{"type":"literal","value":"2024-01-01"},
+             "comment":{"type":"literal","value":""}}
+          ]}
+        }"#;
+        let client = MockSparqlClient::from_json(fixture_with_dupes);
+        let eli = Eli::new("eli/cc/2017/762").unwrap();
+
+        let resp = get_article_history(
+            &client,
+            &eli,
+            "art_19",
+            ValidAsOf::new(date!(2026 - 07 - 02)),
+        )
+        .await
+        .unwrap();
+        // Zeile 1+2 sind identisch → eine bleibt; Zeile 3 (anderes Datum) bleibt.
+        assert_eq!(resp.data().len(), 2, "identische Zeilen müssen kollabieren");
+        assert_eq!(
+            resp.data()[0].comment,
+            None,
+            "leeres comment-Literal muss None sein"
+        );
+
+        // Beide Impact-Queries dedupen bereits an der Quelle.
+        let q = client.last_query().unwrap();
+        assert!(q.contains("SELECT DISTINCT"), "Query ohne DISTINCT: {q}");
+
+        let resp = get_impacts(&client, &eli, ValidAsOf::new(date!(2026 - 07 - 02)))
+            .await
+            .unwrap();
+        assert_eq!(resp.data().len(), 2);
+        assert!(client.last_query().unwrap().contains("SELECT DISTINCT"));
     }
 
     #[tokio::test]
