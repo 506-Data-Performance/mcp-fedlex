@@ -115,7 +115,11 @@ curl -s -X POST http://localhost:8080/rpc \
 
 La risposta contiene il testo della norma **e** un blocco `provenance`
 (`eli`, `valid_as_of`). Il parametro opzionale `as_of` (ISO `YYYY-MM-DD`) imposta
-la data di riferimento; senza di esso vale la data odierna.
+la data di riferimento; senza di esso vale la data odierna. È accettato su due
+canali (ADR-011): dentro gli `arguments` (il canale che un agente LLM raggiunge
+tramite qualsiasi host MCP standard — ogni strumento lo annuncia) oppure come
+fratello di `arguments` (fissato dall'host; ha la precedenza). La data
+effettivamente usata è sempre marcata lato server in `provenance.valid_as_of`.
 
 ## Collegarsi a un client MCP
 

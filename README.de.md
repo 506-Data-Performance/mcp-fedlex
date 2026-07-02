@@ -113,7 +113,10 @@ curl -s -X POST http://localhost:8080/rpc \
 
 Die Antwort enthält den Normtext **und** einen `provenance`-Block (`eli`, `valid_as_of`).
 Der optionale `as_of`-Parameter (ISO `YYYY-MM-DD`) steuert den Stichtag; ohne ihn gilt
-heute.
+heute. Er wird auf zwei Kanälen akzeptiert (ADR-011): innerhalb der `arguments`
+(der Kanal, den ein LLM-Agent über jeden Standard-MCP-Host erreicht — jedes Tool
+annonciert ihn) oder als Geschwister von `arguments` (Host-gepinnt; hat Vorrang).
+Das effektiv verwendete Datum stempelt der Server immer in `provenance.valid_as_of`.
 
 ## An einen MCP-Client anbinden
 

@@ -56,7 +56,23 @@ impl Registry {
             .values()
             .filter(|t| role_allows(role, t.pool()))
             .map(|t| {
-                let schema = t.schema();
+                let mut schema = t.schema();
+                // Stichtag zentral annoncieren (68 §A-2, ADR-011): JEDE Antwort
+                // trägt ein `valid_as_of` in der Provenance — der Stichtag ist
+                // damit eine Dimension jedes Aufrufs, nicht einzelner Tools.
+                // Zentral injiziert statt 40-fach von Hand gepflegt (keine
+                // neue Drift-Quelle); ein Tool-eigenes `as_of` würde gewinnen.
+                if let Some(props) = schema
+                    .get_mut("properties")
+                    .and_then(Value::as_object_mut)
+                {
+                    props.entry("as_of").or_insert_with(|| {
+                        json!({
+                            "type": "string",
+                            "description": "Stichtag JJJJ-MM-TT (optional; Default: heute). Bestimmt die geltende Fassung; das effektiv verwendete Datum steht in provenance.valid_as_of.",
+                        })
+                    });
+                }
                 // Top-Level-`description` (68 §A-1): MCP-Hosts präsentieren dem
                 // Modell DIESES Feld — nicht `inputSchema.description`. Ohne das
                 // Doppel-Emit erschienen alle Tools in Standard-Hosts nackt.

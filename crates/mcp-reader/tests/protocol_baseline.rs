@@ -265,6 +265,20 @@ async fn tools_list_entry_shape_is_frozen() {
             entry["inputSchema"], entry["schema"],
             "inputSchema und schema müssen denselben Wert tragen (additives Doppel-Emit): {entry}"
         );
+        // Stichtag-Annonce (68 §A-2, ADR-011): JEDES Tool bewirbt das optionale
+        // `as_of`-Argument — der einzige Kanal, über den ein Modell hinter
+        // einem Standard-Host den Stichtag setzen kann. Nie required (Default:
+        // heute).
+        assert!(
+            entry["inputSchema"]["properties"]["as_of"].is_object(),
+            "Tool-Eintrag ohne as_of-Annonce im Schema (68 A-2): {entry}"
+        );
+        if let Some(required) = entry["inputSchema"]["required"].as_array() {
+            assert!(
+                !required.contains(&json!("as_of")),
+                "as_of darf nie required sein (Default: heute): {entry}"
+            );
+        }
         // Top-Level-`description` (68 §A-1): DAS Feld, das MCP-Hosts dem Modell
         // zeigen. Muss nicht-leer sein und dem Schema-Text entsprechen — sonst
         // erscheinen die Tools in Standard-Hosts ohne jede Erklärung.

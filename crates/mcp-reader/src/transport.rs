@@ -248,8 +248,9 @@ aufgehobene und geltende Erlasse können dieselbe SR-Nummer tragen) → mit \
 get_structure/search_text orientieren → gezielt read_article/read_element lesen \
 (read_document ist gross). Werk-ELIs haben die Form `eli/cc/2017/762`, \
 AS-Publikationen `eli/oc/…`; Element-IDs (eid) die Form `art_19` bzw. \
-`art_19/para_2`. Ohne Stichtag gilt das heutige Datum; prüfe provenance.valid_as_of. \
-Fehler kommen in-band als {error, hint} — folge dem hint.";
+`art_19/para_2`. Zeitpunktgenau: setze `as_of` (JJJJ-MM-TT) als Argument — ohne \
+`as_of` gilt das heutige Datum; das effektiv verwendete Datum steht immer in \
+provenance.valid_as_of. Fehler kommen in-band als {error, hint} — folge dem hint.";
 
 /// Der zustandslose MCP-Dienst. Bündelt Registry, Auth, Quota und Temporal.
 pub struct McpService<A: AuthResolver, B: QuotaBackend> {
@@ -456,12 +457,24 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                     .cloned()
                     .unwrap_or_else(|| json!({}));
 
-                // Optionaler Stichtag. Ein ungültiges `as_of` ist Input-Validation
-                // EINES tools/call und damit ein **Tool-Execution-Error** (Delta #13,
-                // ADR-008): in-band als graceful `{ error, hint }` im `result`,
-                // formgleich zu Dispatch (ADR-006) und Quota-Pfad — nicht als
+                // Optionaler Stichtag (68 §A-2, ADR-011). Zwei Kanäle:
+                // `params.as_of` (Host-Kanal, hat Vorrang — bestehende Clients
+                // ansV/syllogismus) und `arguments.as_of` (Agenten-Kanal — der
+                // einzige Ort, den ein Modell über einen Standard-MCP-Host
+                // erreicht). Vorher wurde ein `as_of` in den arguments
+                // stillschweigend ignoriert: Der Agent glaubte, historisch
+                // gefragt zu haben, und bekam heutiges Recht. Ein ungültiges
+                // `as_of` ist Input-Validation EINES tools/call und damit ein
+                // **Tool-Execution-Error** (Delta #13, ADR-008): in-band als
+                // graceful `{ error, hint }` im `result`, formgleich zu
+                // Dispatch (ADR-006) und Quota-Pfad — nicht als
                 // Protocol-Error `-32602`.
-                let requested_as_of = match req.params.get("as_of").and_then(Value::as_str) {
+                let as_of_requested = req
+                    .params
+                    .get("as_of")
+                    .and_then(Value::as_str)
+                    .or_else(|| args.get("as_of").and_then(Value::as_str));
+                let requested_as_of = match as_of_requested {
                     Some(s) => match Date::parse(s, format_description!("[year]-[month]-[day]")) {
                         Ok(d) => Some(d),
                         Err(_) => {
@@ -1041,6 +1054,88 @@ mod tests {
             serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(&text, payload);
         assert_eq!(resp.id, json!(7));
+    }
+
+    /// 68 §A-2 (ADR-011): `as_of` in den `arguments` erreicht den Stempel.
+    /// Das ist der einzige Kanal, den ein Modell über einen Standard-MCP-Host
+    /// erreicht — vorher wurde er stillschweigend ignoriert (heutiges Recht
+    /// mit Norm-Provenance, während der Agent glaubte, historisch zu fragen).
+    #[tokio::test]
+    async fn arguments_as_of_reaches_the_stamp() {
+        let svc = service(MockBackend::allowing());
+        let resp = svc
+            .handle(
+                Some("token-a"),
+                req(
+                    1,
+                    "tools/call",
+                    json!({ "name": "read_article", "arguments": { "as_of": "2020-05-01" } }),
+                ),
+                0,
+            )
+            .await;
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], false);
+        assert_eq!(
+            result["structuredContent"]["provenance"]["valid_as_of"], "2020-05-01",
+            "arguments.as_of muss den Stichtag setzen (68 A-2)"
+        );
+    }
+
+    /// Vorrangregel (ADR-011): `params.as_of` (Host-Kanal) gewinnt gegen
+    /// `arguments.as_of` (Agenten-Kanal) — bestehende Clients, die den
+    /// Stichtag pinnen, bleiben souverän.
+    #[tokio::test]
+    async fn params_as_of_wins_over_arguments_as_of() {
+        let svc = service(MockBackend::allowing());
+        let resp = svc
+            .handle(
+                Some("token-a"),
+                req(
+                    1,
+                    "tools/call",
+                    json!({
+                        "name": "read_article",
+                        "as_of": "2020-01-01",
+                        "arguments": { "as_of": "2021-06-15" },
+                    }),
+                ),
+                0,
+            )
+            .await;
+        let result = resp.result.unwrap();
+        assert_eq!(
+            result["structuredContent"]["provenance"]["valid_as_of"], "2020-01-01",
+            "params.as_of hat Vorrang vor arguments.as_of (ADR-011)"
+        );
+    }
+
+    /// Ein ungültiges `arguments.as_of` ist derselbe in-band Tool-Error wie
+    /// beim params-Kanal — kein stilles Verschlucken, kein Protocol-Error.
+    #[tokio::test]
+    async fn invalid_arguments_as_of_is_in_band_tool_error() {
+        let svc = service(MockBackend::allowing());
+        let resp = svc
+            .handle(
+                Some("token-a"),
+                req(
+                    1,
+                    "tools/call",
+                    json!({ "name": "read_article", "arguments": { "as_of": "gestern" } }),
+                ),
+                0,
+            )
+            .await;
+        assert!(resp.error.is_none(), "kein JSON-RPC-Protocol-Error");
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], true);
+        assert!(
+            result["structuredContent"]["error"]
+                .as_str()
+                .unwrap()
+                .contains("as_of must be an ISO date"),
+            "in-band error muss den as_of-Hinweis tragen: {result}"
+        );
     }
 
     #[test]

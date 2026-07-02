@@ -33,6 +33,15 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Stichtag als Tool-Argument (68 §A-2, ADR-011):** `as_of` (JJJJ-MM-TT) wird
+  jetzt auch in den `arguments` gelesen — der einzige Kanal, den ein Modell
+  über einen Standard-MCP-Host erreicht. Vorher wurde es dort stillschweigend
+  ignoriert (heutiges Recht statt historischer Anfrage); `check_in_force` war
+  zum historischen Stichtag gar nicht befragbar. Vorrang: `params.as_of`
+  (Host-gepinnt) > `arguments.as_of`; jedes Tool annonciert das optionale
+  Property zentral im Schema; die Provenance stempelt weiterhin serverseitig
+  das effektiv verwendete Datum (ADR-004 unberührt). Abnahme: Transport-Tests
+  (Kanal, Vorrang, in-band Error) + Baseline (Annonce, nie required).
 - **Upstream-Timeouts (67 §H-1):** Alle ausgehenden HTTP-Clients (Fedlex-SPARQL,
   AKN-Filestore, JWKS-Abruf) tragen zwingend Connect- (3 s) und Gesamt-Timeout
   (15 s), konfigurierbar über `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` /
