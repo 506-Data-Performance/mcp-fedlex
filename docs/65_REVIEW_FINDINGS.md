@@ -64,7 +64,7 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   hinkte dem Tag knapp zwei Wochen hinterher, weil dieses Dokument selbst untracked war.
 
 ### RF-3 — Live-Pfad ungehärtet; Schutzschicht vorgebaut, aber unverdrahtet
-- **Status:** 🔴 offen (eingeplant — Fahrplan existiert)
+- **Status:** 🟢 erledigt (2026-07-02) — Blöcke H/O/W/T aus [67](67_HARDENING_AND_SOTA_ROADMAP.md) umgesetzt (`17a93f2…9537cc7`); dort offen nur P-1 (wartet auf Freigabe), P-3…P-5
 - **Entdeckt:** 2026-07-02, bei zwei Code-Audits (Stabilität; Primitive/Spec) nach Abschluss
   der 50/60-Fahrpläne.
 - **Beleg:** `reqwest::Client` ohne jedes Timeout (`sparql_http.rs:30`, `xml_source.rs:23`);
@@ -84,7 +84,7 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   Protokoll-Punkte (P-1 `content[]`/`structuredContent` als größte Wire-Abweichung).
 
 ### RF-4 — Doku-Drift: ADR-008 „Proposed", Runbook & Briefing hinken dem Code hinterher
-- **Status:** 🔴 offen (rein redaktionell)
+- **Status:** 🟢 erledigt (2026-07-02, `9537cc7` + `859b9b7` — inkl. dritter Namensdrift, die die neue Wache selbst fand)
 - **Entdeckt:** 2026-07-02, bei denselben Audits.
 - **Beleg:** [ADR-008](adr/ADR-008-mcp-protocol-version-upgrade.md) Status „Proposed", obwohl
   umgesetzt und `v0.2.0` getaggt; [55_MIGRATION](55_MIGRATION_mcp_protocol_upgrade.md) mit
