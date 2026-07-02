@@ -213,9 +213,10 @@ fn akn_txt_article_text_and_notes_eng() {
 #[test]
 #[ignore = "E2E gegen Live-Fedlex"]
 fn akn_txt_search_eng() {
-    let hits = search_text(eng(), "Netzzuschlag", 20);
-    assert!(!hits.is_empty(), "EnG muss 'Netzzuschlag' enthalten");
-    assert!(hits.iter().all(|h| !h.snippet.is_empty()));
+    let out = search_text(eng(), "Netzzuschlag", 20);
+    assert!(!out.hits.is_empty(), "EnG muss 'Netzzuschlag' enthalten");
+    assert!(out.total >= out.hits.len());
+    assert!(out.hits.iter().all(|h| !h.snippet.is_empty()));
 }
 
 #[test]

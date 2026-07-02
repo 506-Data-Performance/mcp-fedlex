@@ -109,6 +109,21 @@ fn arg_limit(args: &Value) -> u32 {
         .clamp(1, 50) as u32
 }
 
+/// Listen-Konvention (68 §B-2): jede limit-gekappte Liste trägt ein
+/// Kappungs-Signal. Da die SPARQL-Queries mit `LIMIT` arbeiten, ist die
+/// Gesamtzahl unbekannt — `truncated: true` heisst „Limit erreicht, es KANN
+/// mehr geben". `limit_applied` macht zusätzlich die stille Klemmung von
+/// `arg_limit` sichtbar (live beobachtet: `limit: 500` → wortlos 50
+/// Ergebnisse, der Agent hielt das Fenster für die Gesamtheit).
+fn capped_list(key: &str, items: Vec<Value>, limit: u32) -> Value {
+    let truncated = items.len() as u32 >= limit;
+    json!({
+        key: items,
+        "truncated": truncated,
+        "limit_applied": limit,
+    })
+}
+
 /// JOLux-Fehler in lenkende Tool-Fehler übersetzen.
 fn map_jolux(err: JoluxError) -> ToolError {
     match err {
@@ -195,7 +210,7 @@ where
             .map(|h| annotate_hit(ctx, h))
             .collect();
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(json!({ "hits": annotated }), prov))
+        Ok(Response::new(capped_list("hits", annotated, limit), prov))
     }
 }
 
@@ -283,7 +298,7 @@ where
             .collect();
         // Bezug der Anfrage ist der Ausgangs-ELI selbst (existiert garantiert).
         let prov = ctx.stamp.into_hint_provenance(eli);
-        Ok(Response::new(json!({ "hits": annotated }), prov))
+        Ok(Response::new(capped_list("hits", annotated, limit), prov))
     }
 }
 
@@ -333,8 +348,9 @@ where
         let hits = find_treaties(self.client.as_ref(), country, bilateral, limit, lang)
             .await
             .map_err(map_jolux)?;
+        let items: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(json!({ "hits": to_value(hits)? }), prov))
+        Ok(Response::new(capped_list("hits", items, limit), prov))
     }
 }
 
@@ -527,11 +543,12 @@ where
         let concepts = list_vocabulary(self.client.as_ref(), scheme, lang, limit)
             .await
             .map_err(map_jolux)?;
+        let items: Vec<Value> = concepts
+            .into_iter()
+            .filter_map(|c| to_value(c).ok())
+            .collect();
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(
-            json!({ "concepts": to_value(concepts)? }),
-            prov,
-        ))
+        Ok(Response::new(capped_list("concepts", items, limit), prov))
     }
 }
 
@@ -568,8 +585,20 @@ where
         let neighborhood = explore_node(self.client.as_ref(), uri, limit)
             .await
             .map_err(map_jolux)?;
+        // 68 §B-2: beide Richtungen sind einzeln limit-gekappt — das Signal
+        // zeigt an, ob mindestens eine Richtung am Limit hängt.
+        let truncated = neighborhood.outgoing.len() as u32 >= limit
+            || neighborhood.incoming.len() as u32 >= limit;
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(to_value(neighborhood)?, prov))
+        Ok(Response::new(
+            json!({
+                "outgoing": to_value(neighborhood.outgoing)?,
+                "incoming": to_value(neighborhood.incoming)?,
+                "truncated": truncated,
+                "limit_applied": limit,
+            }),
+            prov,
+        ))
     }
 }
 
@@ -821,6 +850,33 @@ mod tests {
             .await;
         assert_eq!(result["provenance"]["kind"], "hint", "{result}");
         assert!(result["data"]["concepts"].as_array().unwrap().is_empty());
+        // 68 §B-2: leere Liste unter dem Limit → nicht gekappt.
+        assert_eq!(result["data"]["truncated"], false);
+    }
+
+    /// 68 §B-2: Erreicht eine Liste ihr Limit, wird die Kappung sichtbar —
+    /// truncated=true („es KANN mehr geben") plus das effektiv angewandte
+    /// Limit. Vorher: `limit: 500` → wortlos 50 Ergebnisse; der Agent hielt
+    /// das Fenster für die Gesamtheit (live an der Länderliste beobachtet).
+    #[tokio::test]
+    async fn capped_list_signals_truncation_at_limit() {
+        let one_concept = r#"{
+          "head": { "vars": ["concept", "label"] },
+          "results": { "bindings": [
+            { "concept": { "type": "uri", "value": "https://fedlex.data.admin.ch/vocabulary/country/136" },
+              "label": { "type": "literal", "value": "Deutschland" } }
+          ] }
+        }"#;
+        let result = registry_with(one_concept)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "list_vocabulary",
+                json!({ "scheme_id": "country", "limit": 1 }),
+            )
+            .await;
+        assert_eq!(result["data"]["concepts"].as_array().unwrap().len(), 1);
+        assert_eq!(result["data"]["truncated"], true, "{result}");
+        assert_eq!(result["data"]["limit_applied"], 1);
     }
 
     #[tokio::test]

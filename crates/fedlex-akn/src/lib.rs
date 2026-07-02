@@ -41,7 +41,8 @@ pub use structure::{
     EidHit, OutlineNode, PathStep, get_document_structure, get_section_path, resolve_eid,
 };
 pub use text::{
-    ElementText, Note, RefTarget, SearchHit, get_article_text, get_element_text, search_text,
+    ElementText, Note, RefTarget, SearchHit, SearchOutcome, get_article_text, get_element_text,
+    search_text,
 };
 
 /// Geteilte Test-Fixture — ein EnG-artiges Mini-Dokument, das alle

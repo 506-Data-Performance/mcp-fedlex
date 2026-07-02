@@ -128,15 +128,27 @@ pub struct SearchHit {
     pub snippet: String,
 }
 
+/// Ergebnis der Volltextsuche: Treffer bis `max_hits` plus die **Gesamtzahl**
+/// aller Fundstellen (68 §B-2) — der Konsument sieht, ob gekappt wurde,
+/// statt eine exakt volle Trefferliste für „alles" zu halten.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchOutcome {
+    /// Treffer in Dokumentreihenfolge, höchstens `max_hits`.
+    pub hits: Vec<SearchHit>,
+    /// Gesamtzahl der Fundstellen im Dokument (auch jenseits von `max_hits`).
+    pub total: usize,
+}
+
 /// AKN-TXT-04: Case-insensitive Volltextsuche über die eId-Blätter des
 /// Dokuments (Hollowing-Sicht, X20 — Eltern-Container würden jeden Treffer
 /// vervielfachen). Kein Ersatz für eine Such-Infrastruktur, aber das
 /// deterministische Primitiv darunter.
-pub fn search_text(doc: &AknDocument, query: &str, max_hits: usize) -> Vec<SearchHit> {
+pub fn search_text(doc: &AknDocument, query: &str, max_hits: usize) -> SearchOutcome {
     let needle = query.to_lowercase();
     let mut hits = Vec::new();
+    let mut total = 0usize;
     if needle.is_empty() {
-        return hits;
+        return SearchOutcome { hits, total };
     }
     let mut leaf_eids: Vec<(&str, crate::dom::NodeId)> = doc
         .all_eids()
@@ -146,20 +158,20 @@ pub fn search_text(doc: &AknDocument, query: &str, max_hits: usize) -> Vec<Searc
     // Dokumentreihenfolge statt HashMap-Zufall.
     leaf_eids.sort_unstable_by_key(|&(_, n)| n);
     for (eid, node) in leaf_eids {
-        if hits.len() >= max_hits {
-            break;
-        }
         let text = doc.text_of(node);
         let lower = text.to_lowercase();
         if let Some(pos) = lower.find(&needle) {
-            hits.push(SearchHit {
-                eid: eid.to_string(),
-                kind: doc.tag(node).to_string(),
-                snippet: snippet_around(&text, pos, needle.len()),
-            });
+            total += 1;
+            if hits.len() < max_hits {
+                hits.push(SearchHit {
+                    eid: eid.to_string(),
+                    kind: doc.tag(node).to_string(),
+                    snippet: snippet_around(&text, pos, needle.len()),
+                });
+            }
         }
     }
-    hits
+    SearchOutcome { hits, total }
 }
 
 pub(crate) fn has_eid_descendant(doc: &AknDocument, node: crate::dom::NodeId) -> bool {
@@ -228,10 +240,25 @@ mod tests {
     #[test]
     fn search_finds_leaf_with_snippet() {
         let doc = sample();
-        let hits = search_text(&doc, "energieversorgung", 10);
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].eid, "art_1/para_1");
-        assert!(hits[0].snippet.contains("Energieversorgung"));
-        assert!(search_text(&doc, "gibtesnicht", 10).is_empty());
+        let out = search_text(&doc, "energieversorgung", 10);
+        assert_eq!(out.hits.len(), 1);
+        assert_eq!(out.total, 1);
+        assert_eq!(out.hits[0].eid, "art_1/para_1");
+        assert!(out.hits[0].snippet.contains("Energieversorgung"));
+        assert!(search_text(&doc, "gibtesnicht", 10).hits.is_empty());
+    }
+
+    /// 68 §B-2: `total` zählt über `max_hits` hinaus — der Konsument sieht
+    /// die Kappung, statt eine exakt volle Liste für „alles" zu halten.
+    #[test]
+    fn search_total_counts_beyond_max_hits() {
+        let doc = sample();
+        // "e" trifft praktisch jedes Blatt — kappen auf 1.
+        let out = search_text(&doc, "e", 1);
+        assert_eq!(out.hits.len(), 1);
+        assert!(
+            out.total > out.hits.len(),
+            "total muss ueber die Kappung hinaus zaehlen: {out:?}"
+        );
     }
 }

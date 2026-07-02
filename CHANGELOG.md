@@ -33,6 +33,15 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Truncation-Signale statt stiller Kappung (68 §B-2):** Alle limit-gekappten
+  Listen tragen jetzt `truncated` + `limit_applied` (`search_law`,
+  `find_related_topic`, `find_treaties`, `list_vocabulary`, `explore_node`);
+  `search_text` liefert `{hits, total, truncated}` — `total` zählt alle
+  Fundstellen, auch jenseits von `max_hits`. Vorher: `limit: 500` →
+  wortlos 50 Ergebnisse; der Agent hielt das Fenster für die Gesamtheit
+  (live an der Länderliste beobachtet — wäre «Deutschland» nicht zufällig
+  in den ersten 50 gewesen, wäre die Antwort «existiert nicht» gewesen).
+  Abnahme: Kappungs-Tests in `discovery.rs`, `tools.rs`, `text.rs`.
 - **Antwort-Budgets für die schweren Navigations-Tools (68 §B-1, löst 67 §P-5
   für den Live-Pfad):** Live-Messung am EnG: `read_document` 210 KB,
   `get_structure` 95 KB, `get_references` 82 KB — ein Aufruf konnte das

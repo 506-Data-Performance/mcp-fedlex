@@ -330,7 +330,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Case-insensitive Textsuche innerhalb EINES Erlasses (AKN-TXT-04). Kein Ersatz für semantische Suche.",
+            "description": "Case-insensitive Textsuche innerhalb EINES Erlasses (AKN-TXT-04). Liefert {hits, total, truncated} — total zählt alle Fundstellen, auch über max_hits hinaus. Kein Ersatz für semantische Suche.",
             "properties": {
                 "eli": { "type": "string" },
                 "query": { "type": "string" },
@@ -348,9 +348,20 @@ where
             .and_then(Value::as_u64)
             .unwrap_or(20)
             .min(100) as usize;
-        let hits = search_text(resp.data(), query, max_hits);
+        // 68 §B-2: total zählt alle Fundstellen, truncated macht die Kappung
+        // sichtbar — eine exakt volle Trefferliste las sich vorher als
+        // „das ist alles".
+        let outcome = search_text(resp.data(), query, max_hits);
+        let truncated = outcome.total > outcome.hits.len();
         let prov = resp.provenance().clone();
-        Ok(Response::new(to_value(hits)?, prov))
+        Ok(Response::new(
+            json!({
+                "hits": to_value(outcome.hits)?,
+                "total": outcome.total,
+                "truncated": truncated,
+            }),
+            prov,
+        ))
     }
 }
 
@@ -895,6 +906,7 @@ mod tests {
           <article eId="art_1">
             <num>Art. 1</num>
             <paragraph eId="art_1/para_1"><content><p>Dieses Gesetz bezweckt eine sichere Energieversorgung.</p></content></paragraph>
+            <paragraph eId="art_1/para_2"><content><p>Der Bund sorgt fuer einen sparsamen Verbrauch.</p></content></paragraph>
           </article>
         </body>
       </act>
@@ -1041,10 +1053,28 @@ mod tests {
                 json!({ "eli": "eli/cc/2017/762", "query": "energieversorgung" }),
             )
             .await;
-        let hits = out["data"].as_array().unwrap();
+        // 68 §B-2: Listenform {hits, total, truncated} statt nacktem Array.
+        let hits = out["data"]["hits"].as_array().unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0]["eid"], "art_1/para_1");
+        assert_eq!(out["data"]["total"], 1);
+        assert_eq!(out["data"]["truncated"], false);
         assert_eq!(out["provenance"]["eli"], "eli/cc/2017/762");
+    }
+
+    /// 68 §B-2: max_hits kappt sichtbar — total zählt weiter, truncated=true.
+    #[tokio::test]
+    async fn search_text_signals_truncation() {
+        let out = registry()
+            .dispatch(
+                &ctx(),
+                "search_text",
+                json!({ "eli": "eli/cc/2017/762", "query": "e", "max_hits": 1 }),
+            )
+            .await;
+        assert_eq!(out["data"]["hits"].as_array().unwrap().len(), 1);
+        assert!(out["data"]["total"].as_u64().unwrap() > 1);
+        assert_eq!(out["data"]["truncated"], true);
     }
 
     #[tokio::test]
