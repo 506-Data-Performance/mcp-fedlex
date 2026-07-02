@@ -461,7 +461,8 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                 let result = self.registry.dispatch(&ctx, name, args).await;
                 // Audit-Logzeile pro Call. Damit ist server-seitig belegbar,
                 // welcher Mandant wann welche Norm in welcher Fassung gefetcht hat.
-                println!(
+                tracing::info!(
+                    target: "audit",
                     "{}",
                     call_log_line(
                         &ctx.claims,

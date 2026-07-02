@@ -155,7 +155,7 @@ async fn os_shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
-    println!("Shutdown-Signal empfangen — In-Flight-Requests werden abgeschlossen");
+    tracing::info!("Shutdown-Signal empfangen — In-Flight-Requests werden abgeschlossen");
 }
 
 #[cfg(test)]

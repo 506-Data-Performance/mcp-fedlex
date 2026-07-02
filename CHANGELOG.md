@@ -28,6 +28,12 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Strukturiertes Logging (67 §O-1):** `tracing` ersetzt alle 14
+  `println!`/`eprintln!` — Level via `RUST_LOG`, Format via `MCP_LOG_FORMAT`
+  (`text` lokal, `json` für K8s). Die Audit-Zeile pro Tool-Call läuft als
+  `target: "audit"` weiter durch den PII-Scrubber, hängt aber nicht mehr am
+  globalen stdout-Lock auf dem Request-Pfad. CLAUDE.md-Korrektur:
+  `fedlex-telemetry` ist der PII-Scrubber, kein „Tracing-Layer" (67 §O-3).
 - **Tool-Annotations (67 §P-2):** Jeder `tools/list`-Eintrag trägt jetzt
   `annotations` mit `readOnlyHint: true`, `idempotentHint: true`,
   `openWorldHint: false` — zentral gesetzt, weil der Reader als

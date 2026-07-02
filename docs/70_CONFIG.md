@@ -40,6 +40,13 @@ Start hart ab.**
 | `MCP_REQUEST_TIMEOUT_MS` | nein | `30000` | Harte Zeitgrenze pro MCP-Request (Backstop **über** den Upstream-Timeouts aus §1a). |
 | `MCP_MAX_CONCURRENT_REQUESTS` | nein | `256` | Maximal gleichzeitig bearbeitete MCP-Requests pro Pod; alles darüber wird sofort mit 503 abgeworfen (Fail-Fast statt unsichtbarer Warteschlange). |
 
+## 1c. Logging (67 §O-1)
+
+| Variable | Pflicht | Default | Beschreibung |
+| --- | --- | --- | --- |
+| `RUST_LOG` | nein | `info` | Log-Level/Filter (tracing-EnvFilter-Syntax, z. B. `info,audit=info`). |
+| `MCP_LOG_FORMAT` | nein | `text` | `text` (lesbar, lokaler Einstieg) oder `json` (Produktion/K8s — im Deployment setzen). Die Audit-Zeile pro Tool-Call läuft als `target: "audit"` und bleibt PII-gescrubbt. |
+
 ## 1b. Protokoll-Negotiation (ADR-008 · Quelle: `src/protocol.rs`)
 
 Der `initialize`-Handshake handelt die MCP-Protokollversion aus. Nennt der Client eine

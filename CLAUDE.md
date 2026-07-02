@@ -38,7 +38,7 @@ npx -y @modelcontextprotocol/inspector --config inspector.json --server fedlex
 - **fedlex-jolux** — getestete, komponierbare JOLux-SPARQL-Primitive (Metadaten/Graph); geht **live** ans öffentliche Fedlex-Endpoint.
 - **fedlex-akn** — AKN-4.0-Lexikon als Funktionen (20 Primitive, `docs/11_LEXICON_akn.md`); lokale Navigation im Akt-Volltext.
 - **fedlex-bridge** — produktiver Pfad JOLux (Metadaten) → AKN (Volltext); bewusst **transportfrei**.
-- **fedlex-telemetry** — Tracing-Layer + PII-Scrubber (Compliance-Gate).
+- **fedlex-telemetry** — PII-Scrubber + `Sensitive`-Typen (Compliance-Gate); das Laufzeit-Logging (`tracing`, `RUST_LOG`/`MCP_LOG_FORMAT`) lebt im mcp-reader.
 - **mcp-reader** — das Binary: zustandsloser MCP-Reader (CQRS-Leseseite); Auth/RBAC, verteilte Quota, HTTP-Routen `/mcp` · `/rpc` · `/sse`.
 
 ## Architektur-Invarianten (ADR-gestützt, test-abgesichert — NICHT verletzen)

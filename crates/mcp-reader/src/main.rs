@@ -40,6 +40,8 @@ const FETCHER_CACHE_MAX_BYTES: u64 = 256 * 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    init_tracing();
+
     let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let addr: SocketAddr = bind_addr.parse()?;
@@ -120,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let listener = TcpListener::bind(addr).await?;
-    println!("mcp-reader lauscht auf {addr}");
+    tracing::info!(%addr, "mcp-reader lauscht");
 
     // Kein Aufwärmlauf: Der Manifestations-Cache füllt sich lazy per
     // Single-Flight (67 §H-5). Ein Vorwärmen häufiger Erlasse (BV/OR/ZGB)
@@ -130,6 +132,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let limits = request_limits_from_env()?;
     serve(listener, app(service, Arc::clone(&health), limits)).await?;
     Ok(())
+}
+
+/// Initialisiert strukturiertes Logging (67 §O-1).
+///
+/// Level via RUST_LOG (Default `info`); Format via MCP_LOG_FORMAT:
+/// `text` (Default, lesbar für den 2-Minuten-Einstieg) oder `json`
+/// (Produktion/K8s, gesetzt im Deployment). Die Audit-Zeile läuft als
+/// `target: "audit"` weiter durch den PII-Scrubber — am Inhalt ändert
+/// sich nichts, nur der Transport (vorher: `println!` mit stdout-Lock
+/// auf dem Request-Pfad).
+fn init_tracing() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let json = matches!(
+        std::env::var("MCP_LOG_FORMAT").as_deref(),
+        Ok("json") | Ok("JSON")
+    );
+    if json {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .json()
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
 }
 
 /// Liest den Lastschutz der MCP-Routen aus der Umgebung (67 §H-2).
@@ -211,14 +238,14 @@ fn build_quota_backend(redis_url: &str) -> Result<RedisQuotaBackend, Box<dyn std
             let tls = fedlex_store::RedisTlsConfig::from_files(&ca, &cert, &key)?;
             let backend =
                 RedisQuotaBackend::connect_with_tls(redis_url, &tls)?.with_op_timeout(op_timeout);
-            println!("Quota-Redis über mTLS verbunden (ADR-005, {redis_url})");
+            tracing::info!(redis_url, "Quota-Redis über mTLS verbunden (ADR-005)");
             Ok(backend)
         }
         (None, None, None) => {
             let backend = RedisQuotaBackend::connect(redis_url)?.with_op_timeout(op_timeout);
-            println!(
-                "Quota-Redis im Klartext verbunden ({redis_url}); \
-                 mTLS deaktiviert (kein Zertifikatsmaterial)"
+            tracing::info!(
+                redis_url,
+                "Quota-Redis im Klartext verbunden; mTLS deaktiviert (kein Zertifikatsmaterial)"
             );
             Ok(backend)
         }
@@ -253,13 +280,18 @@ fn build_auth_resolver(
         // hängender IdP darf den Refresh-Task nicht dauerhaft blockieren.
         let http = timeouts.client()?;
         spawn_jwks_refresher(Arc::clone(&resolver), http, url.clone(), refresh_secs);
-        println!("JWT-Auth aktiv (JWKS {url}, Issuer {issuer}, Refresh {refresh_secs}s)");
+        tracing::info!(
+            jwks_url = url,
+            issuer,
+            refresh_secs,
+            "JWT-Auth aktiv (JWKS)"
+        );
         return Ok(Box::new(resolver));
     }
 
     if let Ok(secret) = std::env::var("MCP_JWT_HS256_SECRET") {
         let issuer = issuer.ok_or("MCP_JWT_ISSUER ist im JWT-Modus Pflicht")?;
-        println!("JWT-Auth aktiv (HS256, Issuer {issuer})");
+        tracing::info!(issuer, "JWT-Auth aktiv (HS256)");
         return Ok(Box::new(JwtAuthResolver::hs256(
             secret.as_bytes(),
             &issuer,
@@ -270,7 +302,7 @@ fn build_auth_resolver(
     if let Ok(path) = std::env::var("MCP_JWT_RS256_PUBKEY_FILE") {
         let issuer = issuer.ok_or("MCP_JWT_ISSUER ist im JWT-Modus Pflicht")?;
         let pem = std::fs::read(&path)?;
-        println!("JWT-Auth aktiv (RS256, Issuer {issuer}, Key {path})");
+        tracing::info!(issuer, key_file = path, "JWT-Auth aktiv (RS256)");
         return Ok(Box::new(
             JwtAuthResolver::rs256_pem(&pem, &issuer, audience.as_deref())
                 .map_err(|_| format!("ungueltiger RSA-Public-Key in {path}"))?,
@@ -287,9 +319,11 @@ fn build_auth_resolver(
                 role: mcp_reader::auth::Role::Validator,
             },
         );
-        println!("MCP_DEV_TOKEN aktiv (Rolle Validator, Mandant dev)");
+        tracing::warn!("MCP_DEV_TOKEN aktiv (Rolle Validator, Mandant dev) — nicht für Produktion");
     } else {
-        println!("Keine Auth-Konfiguration. Server bleibt fail-closed (kein Credential gueltig).");
+        tracing::warn!(
+            "Keine Auth-Konfiguration — Server bleibt fail-closed (kein Credential gueltig)"
+        );
     }
     Ok(Box::new(auth))
 }
@@ -310,13 +344,15 @@ fn spawn_jwks_refresher(
             match http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.text().await {
                     Ok(body) => match resolver.install_jwks(&body) {
-                        Ok(n) => println!("JWKS aktualisiert ({n} Schluessel)"),
-                        Err(_) => eprintln!("JWKS nicht parsebar, alter Satz bleibt aktiv"),
+                        Ok(n) => tracing::info!(keys = n, "JWKS aktualisiert"),
+                        Err(_) => tracing::warn!("JWKS nicht parsebar, alter Satz bleibt aktiv"),
                     },
-                    Err(e) => eprintln!("JWKS-Abruf fehlgeschlagen: {e}"),
+                    Err(e) => tracing::warn!(error = %e, "JWKS-Body nicht lesbar"),
                 },
-                Ok(resp) => eprintln!("JWKS-Endpunkt antwortete {}", resp.status()),
-                Err(e) => eprintln!("JWKS-Abruf fehlgeschlagen: {e}"),
+                Ok(resp) => {
+                    tracing::warn!(status = %resp.status(), "JWKS-Endpunkt antwortete nicht-2xx")
+                }
+                Err(e) => tracing::warn!(error = %e, "JWKS-Abruf fehlgeschlagen"),
             }
             tokio::time::sleep(std::time::Duration::from_secs(refresh_secs)).await;
         }
