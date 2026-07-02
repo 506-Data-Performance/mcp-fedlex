@@ -11,9 +11,9 @@
 >
 > **Abarbeitung 2026-07-02:** Blöcke **H, O, W, T vollständig umgesetzt** plus P-2
 > (Commits `17a93f2…9537cc7`, jeder mit Test-Abnahme; CI-Gleichlauf durchgehend grün).
-> Offen: **P-1** (content[]/structuredContent — wartet auf Freigabe, Breaking Change
-> inkl. Konsumenten-Nachzug), **P-3** (OAuth-Discovery-Fassade), **P-4** (`resources`,
-> Produktentscheidung), **P-5** (Result-Pagination).
+> Danach: **P-1** umgesetzt (ADR-009 inkl. Konsumenten-Nachzug) und **P-5** über
+> [68 §B-1/B-2](68_AGENT_UX_FINDINGS.md) gelöst. Offen bleiben: **P-3**
+> (OAuth-Discovery-Fassade) und **P-4** (`resources`, Produktentscheidung).
 
 ---
 
@@ -201,7 +201,7 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
 - **Abnahme:** ADR mit Scope-Entscheid; falls ja: `resources`-Capability, RBAC/Quota/
   Provenance-Gate identisch zu Tools.
 
-### P-5 — Result-Pagination für große Antworten 🔴 **P3**
+### P-5 — Result-Pagination für große Antworten 🟢 (2026-07-02 via [68 §B-1/B-2](68_AGENT_UX_FINDINGS.md): get_structure depth-Skelett, read_document Zeichen-Budget + offset, get_references/Listen mit total/truncated)
 - **Beleg:** `read_document`/`search_text` liefern unbegrenzte Strukturen; `paginate()`
   liegt tot in `xml_engine.rs:158-173`.
 - **Abnahme:** Cursor-Parameter für die großen Tools, Grenzen dokumentiert; verhindert

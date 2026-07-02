@@ -8,6 +8,13 @@
 > Tool N+1). ~35 Live-Calls gegen Fedlex, Binary nativ + Redis-Container, Dev-Token
 > (Validator), `/rpc`. Jeder Punkt trägt Beleg aus der Session.
 > **Status-Werte:** 🔴 offen · 🟡 in Arbeit · 🟢 erledigt · ⚪ verworfen.
+>
+> **Abarbeitung 2026-07-02:** Alle Punkte umgesetzt (`961eca8…0c38627`,
+> jeder mit Test-Abnahme; SPARQL-Änderungen zusätzlich live gegen Fedlex
+> verifiziert; CI-Gleichlauf durchgehend grün, 25 Suiten). A-2 ist als
+> **ADR-011** festgehalten. Einzig C-9 (Quota-Sichtbarkeit) ist bewusst
+> ⚪ verworfen. B-1 löst damit auch [67 P-5](67_HARDENING_AND_SOTA_ROADMAP.md)
+> für den Live-Pfad.
 
 ---
 
@@ -44,7 +51,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 
 ## A — Sichtbarkeitsschicht (höchster Hebel)
 
-### A-1 · Tool-Beschreibungen fehlen auf Top-Level 🔴
+### A-1 · Tool-Beschreibungen fehlen auf Top-Level 🟢 (`961eca8`)
 
 - **Beleg:** `tools/list`: `.tools[].description` ist bei allen 40 Tools `null`; der
   Text existiert, aber nur in `inputSchema.description` (und im Legacy-Duplikat `schema`).
@@ -55,7 +62,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 - **Behandlung:** In `tools/list` denselben String zusätzlich als `description`
   emittieren. Eine Zeile pro Tool-Definition, kein Breaking Change.
 
-### A-2 · Stichtag für Agenten unerreichbar; falsches `as_of` wird verschluckt 🔴
+### A-2 · Stichtag für Agenten unerreichbar; falsches `as_of` wird verschluckt 🟢 (`0226cdc`, ADR-011)
 
 - **Beleg:** `as_of` wird nur auf `params`-Ebene gelesen (`transport.rs:445`).
   `read_article` mit `as_of:"2024-01-01"` **in `arguments`** → Provenance
@@ -74,7 +81,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   `compare_to` heute schon als ISO-Datum in `arguments`. Entscheidung als **ADR-011**
   festhalten.
 
-### A-3 · `initialize` ohne `instructions` 🔴
+### A-3 · `initialize` ohne `instructions` 🟢 (`7e2a951`)
 
 - **Beleg:** `initialize`-Result enthält `protocolVersion`, `serverInfo`,
   `capabilities` — kein `instructions`-Feld.
@@ -91,7 +98,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 
 ## B — Antwort-Ökonomie (Kontext ist die knappste Ressource des Agenten)
 
-### B-1 · Große Antworten sprengen das Kontext-Budget (Live-Zahlen zu 67 P-5) 🔴
+### B-1 · Große Antworten sprengen das Kontext-Budget (Live-Zahlen zu 67 P-5) 🟢 (`3eb488c`)
 
 - **Beleg (EnG, mittelgroßes Gesetz):** `read_document` **210 KB**, `get_structure`
   **95 KB** (bis Absatz-Ebene, mit leeren `children: []`-Arrays), `get_references`
@@ -106,7 +113,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   (`xml_engine::paginate` existiert bereits getestet); (c) optional `max_bytes`-Budget
   pro Call.
 
-### B-2 · Stille Kappung ohne Truncation-Signal 🔴
+### B-2 · Stille Kappung ohne Truncation-Signal 🟢 (`84acc1b`)
 
 - **Beleg:** `list_vocabulary` mit `limit: 500` → exakt 50 Konzepte, kein Marker.
   `search_text` → exakt 20 Treffer (Default) als nacktes Array, kein `total`.
@@ -121,7 +128,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 
 ## C — Komponierbarkeit & Datenqualität
 
-### C-1 · Nackte Vokabular-URIs überall; Sprach-URIs inkompatibel zum eigenen `lang`-Enum 🔴
+### C-1 · Nackte Vokabular-URIs überall; Sprach-URIs inkompatibel zum eigenen `lang`-Enum 🟢 (`5b5c594`)
 
 - **Beleg:** `impact_type: …/impact-type/1` (`get_article_history`),
   `type_document: …/resource-type/21` (`get_law_metadata`), `genre: …/legal-resource-genre/100`
@@ -136,7 +143,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   als `label` inline mitliefern — der Join ist ein statisches Mapping bzw. ein
   gecachter Lookup, kein zweiter SPARQL-Roundtrip pro Client.
 
-### C-2 · `list_vocabulary`: gültige `scheme_id`s nirgends aufgezählt, kein Suchfilter 🔴
+### C-2 · `list_vocabulary`: gültige `scheme_id`s nirgends aufgezählt, kein Suchfilter 🟢 (`4be5113`)
 
 - **Beleg:** Parameter-Description = «Schema-Kennung des Vokabulars» — welche Kennungen
   existieren, steht nirgends («country» war geraten). Deutschland finden hieß: Liste
@@ -147,7 +154,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   Menge) oder als Enum; zusätzlich `query`-Filterparameter (serverseitiges
   `FILTER(CONTAINS(...))`).
 
-### C-3 · `get_article_history`: identische Duplikat-Einträge, leere Felder 🔴
+### C-3 · `get_article_history`: identische Duplikat-Einträge, leere Felder 🟢 (`2684af4`)
 
 - **Beleg:** Historie von `art_19` (EnG) → zweimal exakt derselbe Impact-Datensatz
   (gleiche `impact_uri`); `comment: ""`.
@@ -155,7 +162,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 - **Behandlung:** `DISTINCT` bzw. Dedup nach `impact_uri` in JLX-MOD-Query prüfen
   (vermutlich Join-Fanout über Sprachen); leere `comment`-Felder weglassen.
 
-### C-4 · Verträge ohne Titel 🔴
+### C-4 · Verträge ohne Titel 🟢 (`174cf0f`)
 
 - **Beleg:** `find_treaties`-Hits tragen nur `process_uri` + `signature_date`;
   `get_treaty_info` liefert `title: ""` (Vertrag CH–DE, signiert 2024-04-12 — Titel
@@ -166,7 +173,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   (vermutlich language-gebundener Titel, DE fehlt → COALESCE über Sprachen);
   Titel in beide Antworten aufnehmen.
 
-### C-5 · `search_law`-Treffer ohne In-Kraft-Status 🔴
+### C-5 · `search_law`-Treffer ohne In-Kraft-Status 🟢 (`127d714`)
 
 - **Beleg:** «Energiegesetz» → EnG **1998** (aufgehoben, steht zuerst) und EnG **2016**
   (geltend), **beide SR 730.0**, nichts unterscheidet sie im Treffer.
@@ -177,7 +184,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 - **Behandlung:** `in_force`-Flag (oder `status`) pro Hit aus JLX-RES-02 mitliefern;
   geltendes Recht zuerst sortieren; Per-Hit-Provenance entfernen.
 
-### C-6 · `parse_unlinked_ref` parst zu flach 🔴
+### C-6 · `parse_unlinked_ref` parst zu flach 🟢 (`775b7a1`)
 
 - **Beleg:** «Art. 58 Abs. 1 ParlG» → `{kind: "Article", value: "58 Abs. 1 ParlG"}`.
 - **Wirkung:** Der Agent muss den Rest selbst parsen — genau die Arbeit, die das Tool
@@ -186,7 +193,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 - **Behandlung:** AKN-REF-02 um Absatz/Kürzel-Extraktion erweitern; Ausgabefelder
   `article`, `paragraph`, `act_abbreviation`, `eid_candidate` (weiterhin hint).
 
-### C-7 · Fehler-Hints nennen das Folge-Tool nicht 🔴
+### C-7 · Fehler-Hints nennen das Folge-Tool nicht 🟢 (`432ed88`)
 
 - **Beleg:** Unbekanntes ELI/eid → «Pruefe ELI/Stichtag oder nutze ein Suchtool.»
   `get_oc_act` mit AS-ELI (plausible Verwechslung: das Tool handelt *von* der AS)
@@ -199,7 +206,7 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   ELI-*Typ*-Fehlern (oc statt cc) → erwartete Form benennen. Nebenbei: Umlaute in
   Hint-Texten («Pruefe» → «Prüfe»).
 
-### C-8 · Output-Feldnamen ≠ Input-Parameter der Folge-Tools 🔴
+### C-8 · Output-Feldnamen ≠ Input-Parameter der Folge-Tools 🟢 (`0c38627`, via Descriptions statt Breaking Rename)
 
 - **Beleg:** `find_treaties` → `hits[].process_uri`, aber `get_treaty_info` will
   `uri`; `get_drafts` → `uri`, aber `get_consultations` will `draft_uri`;
@@ -210,14 +217,16 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
   benennen die Herkunft («`uri`: die `process_uri` aus `find_treaties`»). Ambitionierter:
   Feldnamen harmonisieren (Output-Feld heißt wie der Parameter des Folge-Tools).
 
-### C-9 · Quota für den Agenten unsichtbar 🔴
+### C-9 · Quota für den Agenten unsichtbar ⚪ (verworfen 2026-07-02)
 
 - **Beleg:** Keine RateLimit-Header, kein Quota-Status-Tool; der Agent erfährt sein
   Budget erst beim in-band Quota-Fehler.
 - **Wirkung:** Gering — der graceful Fehler existiert und trägt Retry-Semantik.
-- **Behandlung:** Empfehlung: **kein** eigenes Tool (Quota gehört nicht in die
-  LLM-Schicht, ADR-002-Nähe); wenn überhaupt, `X-RateLimit-*`-Header auf HTTP-Ebene.
-  Kandidat für ⚪ verworfen.
+- **Behandlung:** Verworfen: kein eigenes Tool (Quota gehört nicht in die
+  LLM-Schicht, ADR-002-Nähe), und der graceful in-band Quota-Fehler trägt
+  bereits `retry_after_ms` — der Agent erfährt beim einzigen relevanten
+  Ereignis alles Nötige. `X-RateLimit-*`-Header bleiben eine Option auf
+  HTTP-Ebene, falls je ein Host sie auswertet.
 
 ---
 
@@ -226,4 +235,4 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 **A-1 → A-3 → A-2** (Sichtbarkeitsschicht: zwei davon sind Kleinstaufwand, A-2 braucht
 ADR-011) — dann **C-3/C-4** (Datenqualität der neuen Tranche, SPARQL-seitig) — dann
 **B-1/B-2** als gemeinsame Listen-/Budget-Konvention (löst 67 P-5 mit ab) — dann
-C-1/C-2/C-5–C-8 als Ergonomie-Welle.
+C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
