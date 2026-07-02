@@ -3,7 +3,7 @@
 use fedlex_core::IdError;
 
 /// Fehler beim Parsen oder Verarbeiten eines AKN-Dokuments.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum AknError {
     /// Das XML konnte nicht geparst werden (im Fedlex-Corpus nie beobachtet,
     /// 0 Parse-Fehler auf 15'807 Dateien, X15.1 — aber Eingaben sind Eingaben).

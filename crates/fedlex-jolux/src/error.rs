@@ -7,7 +7,7 @@ use thiserror::Error;
 /// Die Primitive selbst geben `Result<_, JoluxError>` zurück. Die agentenseitige
 /// Tool-Schicht übersetzt diese Fehler dann in lenkende `{ error, hint }`-Antworten
 /// (Graceful Failure) — die Primitive bleiben ehrliche `Result`-Funktionen.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum JoluxError {
     /// Transport-/Verbindungsfehler des SPARQL-Clients.
     #[error("SPARQL transport error: {0}")]

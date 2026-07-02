@@ -16,6 +16,14 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Manifestations-Cache: Single-Flight + Byte-Budget (67 §H-5):** N parallele
+  Misses auf dieselbe Manifestation lösen jetzt genau **einen** Download+Parse
+  aus (`try_get_with`; Fehler werden nicht gecacht und strukturerhaltend an
+  alle Wartenden geteilt — die Fehler-Enums sind dafür `Clone`). Das
+  Cache-Budget ist neu ein **Byte-Budget** über die XML-Größen
+  (`MCP_FETCHER_CACHE_MAX_BYTES`, Default 256 MB, TinyLFU-Eviction) statt
+  einer Eintragszahl (64 × bis zu 10 MB waren unbegrenzt). Abnahme:
+  `parallel_misses_trigger_exactly_one_fetch`, `failed_fetch_is_not_cached`.
 - **Redis-Härtung (67 §H-4):** Der Token-Bucket nutzt eine geteilte,
   selbstheilende Verbindung (`ConnectionManager`, Lazy-Init) statt pro Aufruf
   neu zu verbinden — mit mTLS war das ein TLS-Handshake **pro Request**. Jede

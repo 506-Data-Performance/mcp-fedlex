@@ -142,7 +142,9 @@ async fn fetch<C, S>(
 ) -> Result<Response<Arc<AknDocument>>, ToolError>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    // `'static` wegen des Single-Flight-Caches (67 §H-5): die geteilte
+    // XML-Quelle wandert in den Init-Future des Cache-Eintrags.
+    S: XmlSource + Send + Sync + 'static,
 {
     let eli = arg_eli(args)?;
     let lang = arg_lang(args)?;
@@ -165,7 +167,7 @@ struct ReadArticle<C, S> {
 impl<C, S> McpTool for ReadArticle<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "read_article"
@@ -204,7 +206,7 @@ struct ReadElement<C, S> {
 impl<C, S> McpTool for ReadElement<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "read_element"
@@ -243,7 +245,7 @@ struct GetStructure<C, S> {
 impl<C, S> McpTool for GetStructure<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "get_structure"
@@ -282,7 +284,7 @@ struct SearchText<C, S> {
 impl<C, S> McpTool for SearchText<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "search_text"
@@ -326,7 +328,7 @@ struct GetMetadata<C, S> {
 impl<C, S> McpTool for GetMetadata<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "get_metadata"
@@ -366,7 +368,7 @@ struct ReadDocument<C, S> {
 impl<C, S> McpTool for ReadDocument<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "read_document"
@@ -403,7 +405,7 @@ struct GetReferences<C, S> {
 impl<C, S> McpTool for GetReferences<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "get_references"
@@ -440,7 +442,7 @@ struct GetModifications<C, S> {
 impl<C, S> McpTool for GetModifications<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "get_modifications"
@@ -477,7 +479,7 @@ struct ExtractTables<C, S> {
 impl<C, S> McpTool for ExtractTables<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "extract_tables"
@@ -515,7 +517,7 @@ struct ListComponents<C, S> {
 impl<C, S> McpTool for ListComponents<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "list_components"
@@ -551,7 +553,7 @@ struct DetectForeignContent<C, S> {
 impl<C, S> McpTool for DetectForeignContent<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "detect_foreign_content"
@@ -605,7 +607,7 @@ fn article_texts(doc: &AknDocument, as_of: ValidAsOf) -> BTreeMap<String, String
 impl<C, S> McpTool for CompareVersions<C, S>
 where
     C: SparqlClient + Send + Sync,
-    S: XmlSource + Send + Sync,
+    S: XmlSource + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
         "compare_versions"
@@ -750,7 +752,7 @@ mod tests {
         let fetcher = Arc::new(AknFetcher::new(
             MockSparqlClient::from_json(CONS_JSON),
             MockXmlSource::new(MINI_ACT),
-            8,
+            1024 * 1024,
         ));
         let mut r = Registry::new();
         register_navigation_tools(&mut r, fetcher);
@@ -1029,7 +1031,7 @@ mod tests {
                 r#"{ "head": { "vars": ["cons","date","url"] }, "results": { "bindings": [] } }"#,
             ),
             MockXmlSource::new(""),
-            8,
+            1024 * 1024,
         ));
         let mut r = Registry::new();
         register_navigation_tools(&mut r, fetcher);

@@ -4,7 +4,7 @@ use fedlex_akn::AknError;
 use fedlex_jolux::JoluxError;
 
 /// Fehler beim Beschaffen oder Parsen eines AKN-Dokuments über die Brücke.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum BridgeError {
     /// Die JOLux-Auflösung (Konsolidierung/Manifestation) schlug fehl —
     /// inklusive `NotFound`, wenn zum Stichtag kein XML existiert (J14.2,

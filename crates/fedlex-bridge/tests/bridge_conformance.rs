@@ -21,7 +21,7 @@ fn fetcher() -> AknFetcher<HttpSparqlClient, HttpXmlSource> {
     AknFetcher::new(
         HttpSparqlClient::fedlex().expect("client"),
         HttpXmlSource::new().expect("source"),
-        8,
+        64 * 1024 * 1024,
     )
 }
 

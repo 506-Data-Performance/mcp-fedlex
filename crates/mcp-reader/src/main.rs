@@ -33,8 +33,10 @@ use mcp_reader::tools::register_navigation_tools;
 use mcp_reader::transport::McpService;
 use tokio::net::TcpListener;
 
-/// Kapazität des Manifestations-Caches (geparste Erlasse pro Pod).
-const FETCHER_CACHE_CAPACITY: u64 = 64;
+/// Byte-Budget des Manifestations-Caches (Summe der XML-Größen pro Pod).
+/// Gewichtsbasiert statt zählbasiert (67 §H-5); via
+/// MCP_FETCHER_CACHE_MAX_BYTES übersteuerbar.
+const FETCHER_CACHE_MAX_BYTES: u64 = 256 * 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,13 +71,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Direct Fetch. Ein Fetcher (und damit ein Manifestations-Cache) für alle
     // Navigations-Tools dieses Pods.
+    let cache_max_bytes = match std::env::var("MCP_FETCHER_CACHE_MAX_BYTES") {
+        Ok(raw) => raw.parse().map_err(|_| {
+            format!("MCP_FETCHER_CACHE_MAX_BYTES muss eine Byte-Zahl sein, war {raw:?}")
+        })?,
+        Err(_) => FETCHER_CACHE_MAX_BYTES,
+    };
     let fetcher = Arc::new(AknFetcher::new(
         sparql.clone(),
         BreakeredXml::new(
             HttpXmlSource::with_timeouts(timeouts)?,
             BreakerConfig::default(),
         ),
-        FETCHER_CACHE_CAPACITY,
+        cache_max_bytes,
     ));
     let mut registry = Registry::new();
     register_navigation_tools(&mut registry, fetcher);
