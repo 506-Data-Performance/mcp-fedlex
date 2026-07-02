@@ -1176,7 +1176,8 @@ mod tests {
             )
             .await;
         assert!(out["error"].as_str().unwrap().contains("not found"));
-        assert!(out["hint"].as_str().unwrap().contains("existiert nicht"));
+        // 68 §C-7: Der eId-Hint nennt das konkrete Folge-Tool.
+        assert!(out["hint"].as_str().unwrap().contains("get_structure"));
     }
 
     #[tokio::test]

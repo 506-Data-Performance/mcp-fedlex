@@ -114,13 +114,19 @@ pub enum ToolError {
 
 impl ToolError {
     /// Ein lenkender Hinweis für das LLM, wie es weitermachen kann.
+    ///
+    /// 68 §C-7: Hints nennen das konkrete Folge-Tool — «nutze ein Suchtool»
+    /// kostete den Agenten einen Rateversuch mehr als nötig.
     pub fn hint(&self) -> &'static str {
         match self {
             ToolError::InvalidArguments(_) => {
-                "Pruefe die Argumente gegen das tool-Schema und versuche es erneut."
+                "Pruefe die Argumente gegen das inputSchema des Tools und versuche es erneut."
+            }
+            ToolError::NotFound(what) if what.contains("eId") => {
+                "Die eId existiert in dieser Fassung nicht. Hole die Gliederung mit get_structure oder finde die Stelle mit search_text."
             }
             ToolError::NotFound(_) => {
-                "Die Ressource existiert nicht. Pruefe ELI/Stichtag oder nutze ein Suchtool."
+                "Die Ressource existiert nicht. Pruefe ELI und Stichtag (as_of) oder finde den Erlass mit search_law bzw. resolve_sr_number."
             }
             ToolError::Upstream(_) => {
                 "Ein nachgelagerter Dienst ist momentan nicht verfuegbar. Versuche es spaeter erneut."

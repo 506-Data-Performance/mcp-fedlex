@@ -33,6 +33,14 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
   ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
   Kernbegriffe im Feld.
+- **Fehler-Hints nennen das Folge-Tool (68 §C-7):** eId nicht gefunden →
+  «hole die Gliederung mit `get_structure` oder finde die Stelle mit
+  `search_text`»; ELI nicht gefunden → «finde den Erlass mit `search_law`
+  bzw. `resolve_sr_number`» (statt «nutze ein Suchtool»). Die plausible
+  ELI-Familien-Verwechslung wird früh abgefangen: `get_oc_act` mit AS-ELI
+  bzw. `get_memorial` mit Werk-ELI liefern einen lenkenden Fehler, der die
+  erwartete Form und das Folge-Tool nennt, statt in ein nacktes NotFound zu
+  laufen (live passiert).
 - **`parse_unlinked_ref` zerlegt strukturiert (68 §C-6):** «Art. 58 Abs. 1
   ParlG» liefert jetzt `article: "58"`, `paragraph: "1"`,
   `act_abbreviation: "ParlG"` und `eid_candidate: "art_58/para_1"` — die

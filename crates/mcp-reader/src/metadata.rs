@@ -685,13 +685,22 @@ where
             "type": "object",
             "description": "Publikation eines Erlasses in der Amtlichen Sammlung (AS/RO, JLX-PUB-01): AS-ELI, Publikationsdatum. Liefert einen BELEG (kind=norm).",
             "properties": {
-                "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
+                "eli": { "type": "string", "description": "Werk-ELI des Erlasses (eli/cc/...), z.B. eli/cc/2017/762 — das AS-ELI steht dann im Ergebnisfeld oc_uri" }
             },
             "required": ["eli"]
         })
     }
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let eli = arg_eli(&args)?;
+        // 68 §C-7: Die plausible Verwechslung (AS-ELI statt Werk-ELI — das
+        // Tool handelt ja VON der AS) lief live in ein nacktes NotFound.
+        // Früher Familien-Check mit lenkendem Hinweis statt Rätselraten.
+        if eli.as_str().starts_with("eli/oc") {
+            return Err(ToolError::InvalidArguments(format!(
+                "get_oc_act erwartet das Werk-ELI des Erlasses (eli/cc/...), nicht die AS-Publikation `{}` — es liefert deren oc_uri gerade als Ergebnis",
+                eli.as_str()
+            )));
+        }
         let resp = get_oc_act(self.client.as_ref(), &eli, ctx.stamp.valid_as_of())
             .await
             .map_err(map_jolux)?;
@@ -728,6 +737,13 @@ where
     }
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let eli = arg_eli(&args)?;
+        // 68 §C-7: Spiegelbild zu get_oc_act — hier ist das AS-ELI richtig.
+        if eli.as_str().starts_with("eli/cc") {
+            return Err(ToolError::InvalidArguments(format!(
+                "get_memorial erwartet das AS-ELI der Publikation (eli/oc/...), nicht den Erlass `{}` — hole das AS-ELI zuerst mit get_oc_act (Feld oc_uri)",
+                eli.as_str()
+            )));
+        }
         let limit = args
             .get("limit")
             .and_then(Value::as_u64)
@@ -1450,6 +1466,40 @@ mod tests {
             .await;
         assert!(result["error"].is_string(), "{result}");
         assert!(result["hint"].is_string(), "{result}");
+    }
+
+    /// 68 §C-7: Die plausible ELI-Familien-Verwechslung wird früh mit
+    /// lenkendem Hinweis abgefangen statt in ein nacktes NotFound zu laufen
+    /// (live passiert: AS-ELI an get_oc_act — das Tool handelt ja VON der AS).
+    #[tokio::test]
+    async fn eli_family_mixup_yields_guiding_error() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_oc_act",
+                serde_json::json!({ "eli": "eli/oc/2022/729" }),
+            )
+            .await;
+        assert!(
+            result["error"].as_str().unwrap().contains("Werk-ELI"),
+            "{result}"
+        );
+
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_memorial",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert!(
+            result["error"].as_str().unwrap().contains("AS-ELI"),
+            "{result}"
+        );
+        assert!(
+            result["error"].as_str().unwrap().contains("get_oc_act"),
+            "Hinweis muss das Folge-Tool nennen: {result}"
+        );
     }
 
     #[tokio::test]
