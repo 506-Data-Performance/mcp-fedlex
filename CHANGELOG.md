@@ -27,6 +27,12 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `inputSchema.description`, womit alle 40 Tools in Standard-Hosts ohne
   Erklärung erschienen. Abnahme: `protocol_baseline` verlangt nicht-leere
   Top-Level-Description == Schema-Text für jeden Eintrag.
+- **`instructions` im `initialize`-Result (68 §A-3):** Der Server liefert dem
+  Host eine kompakte Hausordnung für das Modell (norm vs. hint, typischer
+  Recherche-Ablauf, ELI-/eid-Formen, Stichtag-Semantik, Fehlerform) — der
+  Spec-Kanal, über den ein MCP-Server dem Agenten seine Semantik VOR der
+  ersten Tool-Wahl erklärt. Abnahme: Baseline + Transport-Test verlangen die
+  Kernbegriffe im Feld.
 - **Upstream-Timeouts (67 §H-1):** Alle ausgehenden HTTP-Clients (Fedlex-SPARQL,
   AKN-Filestore, JWKS-Abruf) tragen zwingend Connect- (3 s) und Gesamt-Timeout
   (15 s), konfigurierbar über `MCP_UPSTREAM_CONNECT_TIMEOUT_MS` /

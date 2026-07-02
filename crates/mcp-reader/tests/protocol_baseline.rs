@@ -200,6 +200,15 @@ async fn initialize_handshake_negotiates_target_revision() {
         "serverInfo.version muss gesetzt sein"
     );
 
+    // Hausordnung für Agenten (68 A-3): Hosts injizieren `instructions` in den
+    // System-Prompt — norm/hint-Semantik muss darin erklärt sein.
+    assert!(
+        result["instructions"]
+            .as_str()
+            .is_some_and(|i| i.contains("norm") && i.contains("hint")),
+        "initialize muss instructions mit norm/hint-Semantik tragen (68 A-3)"
+    );
+
     // Capabilities ehrlich und minimal: nur `tools`, sonst nichts.
     assert!(
         result["capabilities"]["tools"].is_object(),

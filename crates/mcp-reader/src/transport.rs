@@ -234,6 +234,23 @@ fn call_log_line(claims: &VerifiedClaims, tool: &str, result: &Value, duration_m
     Value::Object(obj).to_string()
 }
 
+/// Hausordnung für Agenten (68 §A-3), ausgeliefert als `instructions` im
+/// `initialize`-Result. Hosts injizieren dieses Feld in den System-Prompt —
+/// es ist der einzige Kanal, über den der Server dem Modell seine Semantik
+/// erklären kann, BEVOR das erste Tool gewählt wird. Kompakt halten: jedes
+/// Wort hier kostet Kontext in jeder Session.
+const INSTRUCTIONS: &str = "Dieser Server liefert zitierfähiges Schweizer Bundesrecht (Fedlex). \
+Jede Antwort trägt provenance.kind: `norm` ist ein belastbarer Beleg zum Stichtag, \
+`hint` nur ein Suchkandidat — verbuche einen hint nie als Zitat, sondern belege ihn \
+mit einem Norm-Tool (z. B. read_article, get_law_metadata). Typischer Ablauf: \
+search_law oder resolve_sr_number → Kandidat mit check_in_force prüfen (Achtung: \
+aufgehobene und geltende Erlasse können dieselbe SR-Nummer tragen) → mit \
+get_structure/search_text orientieren → gezielt read_article/read_element lesen \
+(read_document ist gross). Werk-ELIs haben die Form `eli/cc/2017/762`, \
+AS-Publikationen `eli/oc/…`; Element-IDs (eid) die Form `art_19` bzw. \
+`art_19/para_2`. Ohne Stichtag gilt das heutige Datum; prüfe provenance.valid_as_of. \
+Fehler kommen in-band als {error, hint} — folge dem hint.";
+
 /// Der zustandslose MCP-Dienst. Bündelt Registry, Auth, Quota und Temporal.
 pub struct McpService<A: AuthResolver, B: QuotaBackend> {
     registry: Registry,
@@ -355,7 +372,9 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                     json!({
                         "protocolVersion": negotiated,
                         "serverInfo": { "name": "mcp-fedlex-reader", "version": env!("CARGO_PKG_VERSION") },
-
+                        // Hausordnung für Agenten (68 §A-3): Hosts injizieren
+                        // dieses Feld in den System-Prompt des Modells.
+                        "instructions": INSTRUCTIONS,
                         "capabilities": { "tools": {} }
                     }),
                 )
@@ -903,6 +922,17 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result["serverInfo"]["name"], "mcp-fedlex-reader");
         assert!(result["capabilities"]["tools"].is_object());
+        // Hausordnung (68 A-3): instructions muss die Kernsemantik tragen,
+        // die das Modell VOR der ersten Tool-Wahl kennen muss.
+        let instructions = result["instructions"]
+            .as_str()
+            .expect("initialize traegt instructions (68 A-3)");
+        for begriff in ["norm", "hint", "eli/cc", "valid_as_of"] {
+            assert!(
+                instructions.contains(begriff),
+                "instructions muss `{begriff}` erklaeren"
+            );
+        }
     }
 
     /// Baut einen Dienst mit explizit gesetzter Default-Protokollversion, um die
