@@ -1140,4 +1140,21 @@ mod tests {
             "geparster Verweis fehlt: {result}"
         );
     }
+
+    /// ADR-010-Abnahme: `extract_change_notes` läuft über den Fetcher und
+    /// trägt Norm-Provenance; ein Dokument ohne Änderungsnotizen liefert
+    /// eine leere Liste, keinen Fehler.
+    #[tokio::test]
+    async fn extract_change_notes_empty_is_list_with_norm_provenance() {
+        let r = registry();
+        let result = r
+            .dispatch(
+                &ctx(),
+                "extract_change_notes",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "norm", "{result}");
+        assert!(result["data"].is_array(), "{result}");
+    }
 }

@@ -1419,4 +1419,75 @@ mod tests {
         assert_eq!(result["provenance"]["eli"], "eli/cc/2017/762");
         assert!(result["data"]["languages"].is_array());
     }
+
+    // --- ADR-010-Abnahme: Dispatch-Tests der neuen Metadata-Tools --------
+
+    const EMPTY_JSON2: &str = r#"{ "head": { "vars": [] }, "results": { "bindings": [] } }"#;
+
+    #[tokio::test]
+    async fn get_law_metadata_carries_norm_provenance() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_law_metadata",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        // Leeres Binding-Set: Felder bleiben None (kein Fehler), die
+        // Norm-Provenance des angefragten Erlasses steht trotzdem.
+        assert_eq!(result["provenance"]["kind"], "norm", "{result}");
+        assert_eq!(result["provenance"]["eli"], "eli/cc/2017/762");
+    }
+
+    #[tokio::test]
+    async fn get_oc_act_unknown_is_graceful_not_found() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_oc_act",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert!(result["error"].is_string(), "{result}");
+        assert!(result["hint"].is_string(), "{result}");
+    }
+
+    #[tokio::test]
+    async fn get_memorial_unknown_is_graceful_not_found() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_memorial",
+                serde_json::json!({ "eli": "eli/oc/2017/762" }),
+            )
+            .await;
+        assert!(result["error"].is_string(), "{result}");
+        assert!(result["hint"].is_string(), "{result}");
+    }
+
+    #[tokio::test]
+    async fn get_fga_documents_empty_is_list_with_norm_provenance() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_fga_documents",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "norm", "{result}");
+        assert!(result["data"].is_array(), "{result}");
+    }
+
+    #[tokio::test]
+    async fn get_drafts_empty_is_list_with_norm_provenance() {
+        let result = registry_with(EMPTY_JSON2)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_drafts",
+                serde_json::json!({ "eli": "eli/cc/2017/762" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "norm", "{result}");
+        assert!(result["data"].is_array(), "{result}");
+    }
 }

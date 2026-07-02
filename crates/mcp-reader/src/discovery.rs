@@ -732,4 +732,103 @@ mod tests {
             .await;
         assert!(out["error"].as_str().unwrap().contains("invalid arguments"));
     }
+
+    // --- ADR-010-Abnahme: Dispatch-Tests der Tranche-D-Tools -------------
+    // Leeres Fedlex-Resultat als Mock: Listen-Tools liefern leere Treffer
+    // MIT Hinweis-Provenance (ADR-006), Einzelobjekt-Tools einen lenkenden
+    // NotFound — nie einen Crash.
+
+    const EMPTY_JSON: &str = r#"{ "head": { "vars": [] }, "results": { "bindings": [] } }"#;
+
+    #[tokio::test]
+    async fn find_treaties_empty_carries_hint_provenance() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(&ctx(Role::Navigator), "find_treaties", json!({}))
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint", "{result}");
+        assert!(result["data"]["hits"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_treaty_info_unknown_uri_is_graceful_not_found() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_treaty_info",
+                json!({ "uri": "https://fedlex.data.admin.ch/x" }),
+            )
+            .await;
+        assert!(result["error"].is_string(), "{result}");
+        assert!(result["hint"].is_string(), "{result}");
+    }
+
+    #[tokio::test]
+    async fn get_consultations_empty_is_list_with_hint() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_consultations",
+                json!({ "draft_uri": "https://fedlex.data.admin.ch/d" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint", "{result}");
+        assert!(
+            result["data"]["consultations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_consultation_documents_empty_is_list_with_hint() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "get_consultation_documents",
+                json!({ "consultation_uri": "https://fedlex.data.admin.ch/c" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint", "{result}");
+        assert!(result["data"]["documents"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_vocabulary_label_unknown_is_graceful_not_found() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "resolve_vocabulary_label",
+                json!({ "vocab_uri": "https://fedlex.data.admin.ch/vocabulary/x" }),
+            )
+            .await;
+        assert!(result["error"].is_string(), "{result}");
+        assert!(result["hint"].is_string(), "{result}");
+    }
+
+    #[tokio::test]
+    async fn list_vocabulary_empty_is_list_with_hint() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "list_vocabulary",
+                json!({ "scheme_id": "legal-taxonomy" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint", "{result}");
+        assert!(result["data"]["concepts"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn explore_node_empty_carries_hint_provenance() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "explore_node",
+                json!({ "uri": "https://fedlex.data.admin.ch/n" }),
+            )
+            .await;
+        assert_eq!(result["provenance"]["kind"], "hint", "{result}");
+        assert!(result["data"].is_object(), "{result}");
+    }
 }
