@@ -108,12 +108,54 @@ where
     protected.merge(health_router(health))
 }
 
-/// Serviert eine fertige App am Listener bis zum Prozessende.
+/// Serviert eine fertige App am Listener bis SIGTERM/Ctrl-C (67 §H-7).
 ///
-/// Dünne Hülle um `axum::serve`. Der Listener ist bewusst von aussen
-/// hereingereicht, damit Aufrufer (Tests wie `main`) die Adresse selbst wählen.
+/// Kubernetes beendet Pods per SIGTERM: Ohne Graceful Shutdown würden
+/// In-Flight-Requests bei jedem Rolling-Deploy hart abgebrochen (502).
+/// Der Listener ist bewusst von aussen hereingereicht, damit Aufrufer
+/// (Tests wie `main`) die Adresse selbst wählen.
 pub async fn serve(listener: TcpListener, app: Router) -> std::io::Result<()> {
-    axum::serve(listener, app).await
+    serve_with_shutdown(listener, app, os_shutdown_signal()).await
+}
+
+/// Wie [`serve`], aber mit explizitem Shutdown-Future — testbar ohne Signale.
+pub async fn serve_with_shutdown(
+    listener: TcpListener,
+    app: Router,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+}
+
+/// Wartet auf SIGTERM (Kubernetes) oder Ctrl-C (lokal).
+///
+/// Lässt sich ein Handler nicht registrieren (praktisch nie), läuft der
+/// Server ohne Graceful Shutdown weiter, statt zu paniken.
+async fn os_shutdown_signal() {
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    println!("Shutdown-Signal empfangen — In-Flight-Requests werden abgeschlossen");
 }
 
 #[cfg(test)]
@@ -372,6 +414,53 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(after.status(), StatusCode::OK);
+    }
+
+    /// Abnahme 67 §H-7: Nach dem Shutdown-Signal wird ein laufender Request
+    /// noch zu Ende bedient (Drain), dann terminiert der Server.
+    #[tokio::test]
+    async fn graceful_shutdown_drains_in_flight_request() {
+        let app = slow_app(
+            Duration::from_millis(300),
+            RequestLimits {
+                timeout: Duration::from_secs(10),
+                max_concurrent: 8,
+            },
+        );
+        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        let server = tokio::spawn(serve_with_shutdown(listener, app, async move {
+            let _ = shutdown_rx.await;
+        }));
+
+        // Langsamen Request starten, dann mitten drin das Signal senden.
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"slow_probe","arguments":{}}}"#;
+        let request = format!(
+            "POST /rpc HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer token-a\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        stream.write_all(request.as_bytes()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        shutdown_tx.send(()).unwrap();
+
+        // Der laufende Request wird trotzdem vollständig beantwortet …
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.unwrap();
+        let text = String::from_utf8_lossy(&response);
+        assert!(text.starts_with("HTTP/1.1 200 OK"), "Antwort war: {text}");
+        assert!(text.contains("provenance"), "Antwort war: {text}");
+
+        // … und der Server terminiert danach von selbst.
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .expect("Server muss nach dem Drain terminieren")
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]

@@ -24,7 +24,7 @@ fedlex-jolux = { path = "../fedlex-jolux" }
 fedlex-akn = { path = "../fedlex-akn" }
 fedlex-bridge = { path = "../fedlex-bridge" }
 thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util", "signal"] }
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -16,6 +16,10 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Graceful Shutdown (67 §H-7):** SIGTERM (Kubernetes) und Ctrl-C beenden
+  den Server geordnet — In-Flight-Requests werden zu Ende bedient (Drain),
+  neue Verbindungen nicht mehr angenommen. Rolling-Deploys produzieren keine
+  502er mehr. Abnahme: `graceful_shutdown_drains_in_flight_request`.
 - **XML-Pfad entkoppelt und begrenzt (67 §H-6):** Der CPU-gebundene
   AKN-Parse (roxmltree, 1–10 MB) läuft in `spawn_blocking` statt auf dem
   Runtime-Worker; der XML-Download hat eine Obergrenze (`MCP_XML_MAX_BYTES`,
