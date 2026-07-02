@@ -22,9 +22,11 @@ use mcp_reader::discovery::register_discovery_tools;
 use mcp_reader::health::HealthState;
 use mcp_reader::metadata::register_metadata_tools;
 
+use mcp_reader::circuit_breaker::BreakerConfig;
 use mcp_reader::probes::{QuotaBackendProbe, SparqlProbe};
 use mcp_reader::quota::{QuotaPolicy, RateLimiter, RedisQuotaBackend};
 use mcp_reader::registry::Registry;
+use mcp_reader::resilience::{BreakeredSparql, BreakeredXml};
 use mcp_reader::temporal::TemporalResolver;
 use mcp_reader::tools::register_navigation_tools;
 
@@ -57,14 +59,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth: Box<dyn AuthResolver + Send + Sync> = build_auth_resolver(timeouts)?;
 
     // Ein SPARQL-Client für alle Live-Pfade dieses Pods (reqwest teilt den
-    // Connection-Pool über Clones), mit Zeitgrenzen aus der Umgebung.
-    let sparql = HttpSparqlClient::fedlex_with(timeouts)?;
+    // Connection-Pool über Clones), mit Zeitgrenzen aus der Umgebung — und
+    // hinter einem gemeinsamen Circuit Breaker (67 §H-3): Fetcher, Discovery
+    // und Metadaten teilen die Fehlerzähler; der Filestore trägt einen
+    // eigenen Breaker. Die Readiness-Probe bleibt am rohen Client (sie soll
+    // den echten Endpoint messen, nicht den Breaker-Zustand).
+    let sparql_raw = HttpSparqlClient::fedlex_with(timeouts)?;
+    let sparql = BreakeredSparql::new(sparql_raw.clone(), BreakerConfig::default());
 
     // Direct Fetch. Ein Fetcher (und damit ein Manifestations-Cache) für alle
     // Navigations-Tools dieses Pods.
     let fetcher = Arc::new(AknFetcher::new(
         sparql.clone(),
-        HttpXmlSource::with_timeouts(timeouts)?,
+        BreakeredXml::new(
+            HttpXmlSource::with_timeouts(timeouts)?,
+            BreakerConfig::default(),
+        ),
         FETCHER_CACHE_CAPACITY,
     ));
     let mut registry = Registry::new();
@@ -88,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let health = Arc::new(
         HealthState::new()
             .with_probe(Arc::new(QuotaBackendProbe::new(backend)))
-            .with_probe(Arc::new(SparqlProbe::new(sparql))),
+            .with_probe(Arc::new(SparqlProbe::new(sparql_raw))),
     );
 
     let listener = TcpListener::bind(addr).await?;

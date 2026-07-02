@@ -16,6 +16,15 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Circuit Breaker auf den Live-Pfaden (67 §H-3):** Der vorgebaute, bisher
+  unverdrahtete `CircuitBreaker` liegt jetzt als Decorator um beide
+  Transport-Traits (`resilience.rs`): ein gemeinsamer Breaker für alle
+  SPARQL-Pfade (Fetcher, Discovery, Metadaten teilen die Fehlerzähler), ein
+  eigener für den AKN-Filestore. Nach 5 Fehlern in Folge scheitern Aufrufe
+  30 s lang sofort mit lenkender Meldung (Fail-Fast statt Task-Stau), dann
+  prüft ein Probe-Aufruf die Genesung. Die Readiness-Probe bleibt bewusst am
+  rohen Client. Abnahme: drei Decorator-Tests (Short-Circuit ohne
+  Endpunkt-Berührung, Erfolgsdurchfluss).
 - **Lastschutz am Router (67 §H-2):** Die MCP-Routen laufen hinter
   Timeout- (`MCP_REQUEST_TIMEOUT_MS`, Default 30 s) und Concurrency-Layer
   (`MCP_MAX_CONCURRENT_REQUESTS`, Default 256, Load-Shedding). Zeitüberschreitung

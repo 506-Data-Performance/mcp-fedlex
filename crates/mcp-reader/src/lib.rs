@@ -31,6 +31,7 @@ pub mod probes;
 pub mod protocol;
 pub mod quota;
 pub mod registry;
+pub mod resilience;
 pub mod sandbox;
 pub mod semantic_client;
 pub mod temporal;
@@ -60,6 +61,7 @@ pub use protocol::{
 };
 pub use quota::{Decision, QuotaBackend, QuotaError, QuotaPolicy, RateLimiter, RedisQuotaBackend};
 pub use registry::Registry;
+pub use resilience::{BreakeredSparql, BreakeredXml};
 pub use sandbox::{SandboxError, SearchSandbox};
 pub use semantic_client::{
     BackendError, RawHit, ScoredHit, SearchOutcome, SemanticBackend, SemanticClient,
