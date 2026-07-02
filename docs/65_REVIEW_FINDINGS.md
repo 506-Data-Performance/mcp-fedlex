@@ -63,6 +63,41 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   2026-06-21). Aufgefallen beim Web-Review ([66 §E-2](66_WEB_REVIEW_FINDINGS.md)): Das Register
   hinkte dem Tag knapp zwei Wochen hinterher, weil dieses Dokument selbst untracked war.
 
+### RF-3 — Live-Pfad ungehärtet; Schutzschicht vorgebaut, aber unverdrahtet
+- **Status:** 🔴 offen (eingeplant — Fahrplan existiert)
+- **Entdeckt:** 2026-07-02, bei zwei Code-Audits (Stabilität; Primitive/Spec) nach Abschluss
+  der 50/60-Fahrpläne.
+- **Beleg:** `reqwest::Client` ohne jedes Timeout (`sparql_http.rs:30`, `xml_source.rs:23`);
+  Router ohne Timeout-/Concurrency-Layer (`transport.rs:637-643`); `CircuitBreaker`,
+  Single-Flight-`L1Cache`, Timeout-`Sandbox`, `WarmupCache`, `SemanticClient` exportiert und
+  getestet, aber 0 Referenzen aus `main/transport/registry/tools/discovery/metadata`;
+  Redis-Connection pro Aufruf ohne Op-Timeout (`token_bucket.rs:118`); kein Graceful
+  Shutdown (`app.rs:42`); Logging = `println!` (`transport.rs:464`), kein `/metrics`;
+  `/readyz` hängt an Live-Fedlex (`probes.rs:78`).
+- **Wirkung:** Wird Fedlex *langsam* (nicht down), staut sich der Server ungebremst —
+  Task-/Socket-Erschöpfung bis zum Pod-Kipp; Rolling-Deploys brechen In-Flight-Requests;
+  im Vorfall fehlt jede Metrik-Sicht. Die „State of the Art"-Bausteine existieren bereits —
+  sie sind nur nie an den Live-Pfad angeschlossen worden.
+- **Behandlung:** Priorisierter Fahrplan mit Abnahmen in
+  [67_HARDENING_AND_SOTA_ROADMAP.md](67_HARDENING_AND_SOTA_ROADMAP.md) (Blöcke H/O/W;
+  P0 = H-1 Timeouts, H-2 Router-Limits, H-3 Breaker verdrahten). Dort auch die
+  Protokoll-Punkte (P-1 `content[]`/`structuredContent` als größte Wire-Abweichung).
+
+### RF-4 — Doku-Drift: ADR-008 „Proposed", Runbook & Briefing hinken dem Code hinterher
+- **Status:** 🔴 offen (rein redaktionell)
+- **Entdeckt:** 2026-07-02, bei denselben Audits.
+- **Beleg:** [ADR-008](adr/ADR-008-mcp-protocol-version-upgrade.md) Status „Proposed", obwohl
+  umgesetzt und `v0.2.0` getaggt; [55_MIGRATION](55_MIGRATION_mcp_protocol_upgrade.md) mit
+  offenen Checkboxen (3.2, 4.2, 7.x, 8.3-8.5) trotz erledigter Arbeit;
+  [IMPLEMENTATION_BRIEFING…](IMPLEMENTATION_BRIEFING_lexicon_projection_matrix.md) nennt
+  21/26/22 statt 24/23/25; [50_ROADMAP](50_ROADMAP_TO_PERFECT.md) nennt 22 Tools und markiert
+  die eigene Erledigung nicht. Zudem zwei Funktionsnamen-Drifts Doku↔Code
+  (`resolve_vocabulary_term/label`, `parse_unlinked_refs/ref`).
+- **Wirkung:** Genau die Drift-Sorte, die RF-1 an der README korrigiert hat — nur eine Ebene
+  tiefer; wer den Docs folgt, implementiert gegen einen alten Stand.
+- **Behandlung:** [67 §T-3](67_HARDENING_AND_SOTA_ROADMAP.md) (Sammel-Nachzug) und
+  [67 §T-2](67_HARDENING_AND_SOTA_ROADMAP.md) (Lexikon-Wache code-getrieben + Namensabgleich).
+
 ---
 
 ## Triage-Regel (ein Satz)
