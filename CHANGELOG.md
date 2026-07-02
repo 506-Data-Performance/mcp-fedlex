@@ -16,6 +16,13 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `HttpSparqlClient::new/fedlex` und `HttpXmlSource::new` sind dadurch fallible
   (sauberer Startabbruch statt reqwest-Panik bei TLS-Init-Fehlern). Abnahme:
   `tests/http_timeouts.rs` beweist den Abbruch gegen einen hängenden Upstream.
+- **Redis-Härtung (67 §H-4):** Der Token-Bucket nutzt eine geteilte,
+  selbstheilende Verbindung (`ConnectionManager`, Lazy-Init) statt pro Aufruf
+  neu zu verbinden — mit mTLS war das ein TLS-Handshake **pro Request**. Jede
+  Redis-Operation steht unter einer Zeitgrenze (`MCP_REDIS_OP_TIMEOUT_MS`,
+  Default 2 s): ein *hängendes* Redis fällt jetzt fail-closed in den
+  Fallback-Bucket statt den Request-Pfad zu blockieren. Abnahme:
+  `hanging_redis_hits_op_timeout_instead_of_blocking`.
 - **Circuit Breaker auf den Live-Pfaden (67 §H-3):** Der vorgebaute, bisher
   unverdrahtete `CircuitBreaker` liegt jetzt als Decorator um beide
   Transport-Traits (`resilience.rs`): ein gemeinsamer Breaker für alle

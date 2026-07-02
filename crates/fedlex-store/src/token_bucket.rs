@@ -7,6 +7,18 @@
 //! Read-Modify-Write-Race zwischen Pods.
 
 use redis::Script;
+use redis::aio::ConnectionManager;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::OnceCell;
+
+/// Default-Zeitgrenze pro Redis-Operation (67 §H-4).
+///
+/// Das Lua-Script braucht unter einer Millisekunde — 2 s sind großzügig.
+/// Ohne diese Grenze schützt fail-closed nur gegen ein *totes* Redis
+/// (schneller Fehler), nicht gegen ein *hängendes* (die Quota-Prüfung
+/// blockiert dann den Request-Pfad, statt in den Fallback zu fallen).
+pub const DEFAULT_OP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Parameter eines Token-Buckets.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,10 +44,16 @@ pub struct Acquisition {
 }
 
 /// Atomares Token-Bucket über Redis.
+///
+/// `Clone` teilt die gemultiplexte Verbindung (`Arc<OnceCell<…>>`): Alle
+/// Klone eines Buckets nutzen **eine** TCP-/TLS-Verbindung statt pro Aufruf
+/// neu zu verbinden (67 §H-4 — mit mTLS wäre das ein Handshake pro Request).
 #[derive(Clone)]
 pub struct RedisTokenBucket {
     client: redis::Client,
     script: Script,
+    conn: Arc<OnceCell<ConnectionManager>>,
+    op_timeout: Duration,
 }
 
 /// Atomare Token-Bucket-Logik. Refill nach verstrichener Zeit, dann Prüfung
@@ -86,6 +104,8 @@ impl RedisTokenBucket {
         Ok(Self {
             client: redis::Client::open(url)?,
             script: Script::new(TOKEN_BUCKET_LUA),
+            conn: Arc::new(OnceCell::new()),
+            op_timeout: DEFAULT_OP_TIMEOUT,
         })
     }
 
@@ -100,14 +120,37 @@ impl RedisTokenBucket {
         Ok(Self {
             client: crate::redis_tls::build_tls_client(url, tls)?,
             script: Script::new(TOKEN_BUCKET_LUA),
+            conn: Arc::new(OnceCell::new()),
+            op_timeout: DEFAULT_OP_TIMEOUT,
         })
+    }
+
+    /// Setzt die Zeitgrenze pro Redis-Operation (Default [`DEFAULT_OP_TIMEOUT`]).
+    pub fn with_op_timeout(mut self, op_timeout: Duration) -> Self {
+        self.op_timeout = op_timeout;
+        self
+    }
+
+    /// Liefert die geteilte, selbstheilende Verbindung (Lazy-Init).
+    ///
+    /// Der [`ConnectionManager`] reconnectet nach Verbindungsabbrüchen
+    /// selbsttätig; schlägt die **erste** Verbindung fehl, bleibt die Zelle
+    /// leer und der nächste Aufruf versucht es erneut.
+    async fn manager(&self) -> Result<ConnectionManager, super::RedisError> {
+        let conn = self
+            .conn
+            .get_or_try_init(|| ConnectionManager::new(self.client.clone()))
+            .await?;
+        Ok(conn.clone())
     }
 
     /// Versucht, `cost` Tokens aus dem Bucket `key` abzubuchen.
     ///
     /// `now_ms` ist die aktuelle Wall-Clock in Millisekunden. Der Aufruf ist
     /// atomar. Bei `allowed == false` ist `retry_after_ms` die geschätzte
-    /// Wartezeit.
+    /// Wartezeit. Die gesamte Operation (inkl. Verbindungsaufbau) steht unter
+    /// [`Self::with_op_timeout`] — ein hängendes Redis liefert einen Fehler,
+    /// den der Aufrufer fail-closed behandelt, statt den Request zu blockieren.
     pub async fn try_acquire(
         &self,
         key: &str,
@@ -115,22 +158,94 @@ impl RedisTokenBucket {
         cost: u32,
         now_ms: u64,
     ) -> Result<Acquisition, super::RedisError> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let (allowed, remaining, retry_after_ms): (i64, i64, i64) = self
-            .script
-            .key(key)
-            .arg(params.capacity)
-            .arg(params.refill_per_sec)
-            .arg(now_ms)
-            .arg(cost)
-            .arg(params.ttl_ms)
-            .invoke_async(&mut conn)
-            .await?;
+        let op = async {
+            let mut conn = self.manager().await?;
+            let triple: (i64, i64, i64) = self
+                .script
+                .key(key)
+                .arg(params.capacity)
+                .arg(params.refill_per_sec)
+                .arg(now_ms)
+                .arg(cost)
+                .arg(params.ttl_ms)
+                .invoke_async(&mut conn)
+                .await?;
+            Ok::<_, super::RedisError>(triple)
+        };
+
+        let (allowed, remaining, retry_after_ms) = tokio::time::timeout(self.op_timeout, op)
+            .await
+            .map_err(|_| {
+                super::RedisError::from(redis::RedisError::from(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "Redis-Operation ueberschritt {} ms (haengendes Redis?)",
+                        self.op_timeout.as_millis()
+                    ),
+                )))
+            })??;
 
         Ok(Acquisition {
             allowed: allowed == 1,
             remaining,
             retry_after_ms,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// Abnahme 67 §H-4: Ein *hängendes* Redis (Verbindung wird angenommen,
+    /// aber nie beantwortet) läuft in das Op-Timeout, statt die Quota-Prüfung
+    /// — und damit den Request-Pfad — unbegrenzt zu blockieren. Der Fehler
+    /// landet beim Aufrufer, der ihn fail-closed behandelt (Fallback-Bucket).
+    #[tokio::test]
+    async fn hanging_redis_hits_op_timeout_instead_of_blocking() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut open = Vec::new();
+            loop {
+                if let Ok((socket, _)) = listener.accept().await {
+                    open.push(socket); // offen halten, nie antworten
+                }
+            }
+        });
+
+        let bucket = RedisTokenBucket::connect(&format!("redis://{addr}"))
+            .unwrap()
+            .with_op_timeout(Duration::from_millis(150));
+        let params = BucketParams {
+            capacity: 10,
+            refill_per_sec: 1.0,
+            ttl_ms: 60_000,
+        };
+
+        let start = Instant::now();
+        let err = bucket
+            .try_acquire("tenant:sess:role", params, 1, 0)
+            .await
+            .expect_err("haengendes Redis muss einen Fehler liefern");
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "Abbruch muss in Timeout-Naehe erfolgen, dauerte {elapsed:?}"
+        );
+        assert!(
+            err.to_string().contains("ueberschritt"),
+            "erwartet Timeout-Fehler, war: {err}"
+        );
+    }
+
+    /// Klone teilen die Verbindungs-Zelle — Grundlage des Connection-Reuse.
+    #[tokio::test]
+    async fn clones_share_the_connection_cell() {
+        let a = RedisTokenBucket::connect("redis://127.0.0.1:6379").unwrap();
+        let b = a.clone();
+        assert!(Arc::ptr_eq(&a.conn, &b.conn));
     }
 }

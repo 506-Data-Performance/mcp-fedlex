@@ -178,15 +178,25 @@ fn build_quota_backend(redis_url: &str) -> Result<RedisQuotaBackend, Box<dyn std
     let cert = std::env::var("MCP_REDIS_TLS_CERT_FILE").ok();
     let key = std::env::var("MCP_REDIS_TLS_KEY_FILE").ok();
 
+    // Zeitgrenze pro Redis-Operation (67 §H-4): hängendes Redis fällt
+    // fail-closed in den Fallback-Bucket statt Requests zu blockieren.
+    let op_timeout = match std::env::var("MCP_REDIS_OP_TIMEOUT_MS") {
+        Ok(raw) => std::time::Duration::from_millis(raw.parse().map_err(|_| {
+            format!("MCP_REDIS_OP_TIMEOUT_MS muss eine Millisekunden-Zahl sein, war {raw:?}")
+        })?),
+        Err(_) => fedlex_store::token_bucket::DEFAULT_OP_TIMEOUT,
+    };
+
     match (ca, cert, key) {
         (Some(ca), Some(cert), Some(key)) => {
             let tls = fedlex_store::RedisTlsConfig::from_files(&ca, &cert, &key)?;
-            let backend = RedisQuotaBackend::connect_with_tls(redis_url, &tls)?;
+            let backend =
+                RedisQuotaBackend::connect_with_tls(redis_url, &tls)?.with_op_timeout(op_timeout);
             println!("Quota-Redis über mTLS verbunden (ADR-005, {redis_url})");
             Ok(backend)
         }
         (None, None, None) => {
-            let backend = RedisQuotaBackend::connect(redis_url)?;
+            let backend = RedisQuotaBackend::connect(redis_url)?.with_op_timeout(op_timeout);
             println!(
                 "Quota-Redis im Klartext verbunden ({redis_url}); \
                  mTLS deaktiviert (kein Zertifikatsmaterial)"

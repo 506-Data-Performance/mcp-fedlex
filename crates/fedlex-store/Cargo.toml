@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 default = []
-redis-store = ["dep:redis"]
+redis-store = ["dep:redis", "dep:tokio"]
 # Gegenseitig authentifizierte Redis-Verbindung (ADR-005). Aktiviert rustls in
 # der redis-Bibliothek, damit der Reader per Client-Zertifikat gegen das
 # Quota-Redis authentifiziert (mTLS) statt im Klartext zu sprechen.
@@ -20,12 +20,13 @@ oxigraph-store = ["dep:oxigraph", "dep:time"]
 [dependencies]
 fedlex-core = { path = "../fedlex-core" }
 thiserror = "2"
-redis = { version = "0.27", optional = true, features = ["tokio-comp"] }
+redis = { version = "0.27", optional = true, features = ["tokio-comp", "connection-manager"] }
+tokio = { version = "1", optional = true, features = ["sync", "time"] }
 oxigraph = { version = "0.4", optional = true }
 time = { version = "0.3", optional = true, features = ["macros", "formatting", "parsing"] }
 
 [dev-dependencies]
 proptest = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 testcontainers = "0.23"
 testcontainers-modules = { version = "0.11", features = ["redis"] }

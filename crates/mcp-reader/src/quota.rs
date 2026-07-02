@@ -68,6 +68,14 @@ mod redis_backend {
                 .map_err(|e| QuotaError::Backend(e.to_string()))?;
             Ok(Self { bucket })
         }
+
+        /// Setzt die Zeitgrenze pro Redis-Operation (67 §H-4). Ein hängendes
+        /// Redis fällt damit fail-closed in den Fallback-Bucket, statt den
+        /// Request-Pfad zu blockieren.
+        pub fn with_op_timeout(mut self, op_timeout: std::time::Duration) -> Self {
+            self.bucket = self.bucket.with_op_timeout(op_timeout);
+            self
+        }
     }
 
     impl QuotaBackend for RedisQuotaBackend {
