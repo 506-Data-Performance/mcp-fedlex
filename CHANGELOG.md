@@ -9,6 +9,11 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **RF-5: Redis-Passwort stand im Klartext im Startup-Log.** `REDIS_URL` wird
+  nur noch redigiert geloggt (`RedactedRedisUrl` in `fedlex-store`: Userinfo →
+  `***`, Rohwert wird nie gespeichert); Regressionstest gegen das
+  `:<pw>@`-Muster.
+
 - **`get_citations` lief bei Erlassen mit realem Zitationsnetz (DSG) in den
   15-s-Timeout (RF-6):** Der `FILTER(STRSTARTS(…))`-Full-Scan über den
   gesamten Zitationsgraphen ist durch das Zwei-Query-Muster aus JLX-IMP-01
@@ -28,6 +33,14 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   (removed in MCP 2025-06-18)» statt des rohen serde-Parse-Fehlers (RF-6).
 
 ### Added
+
+- **CORS-Preflight auf `/mcp` (SOTA-T3):** `OPTIONS /mcp` + CORS-Echo für
+  Origins der `MCP_ALLOWED_ORIGINS`-Allowlist — browserbasierte MCP-Clients
+  können verbinden; fremde Origins bleiben 403, ohne Allowlist bleibt alles
+  fail-closed.
+- **HTTP 401 auf `/mcp` bei Auth-Fehlern (SOTA-T4):** `WWW-Authenticate:
+  Bearer`, JSON-RPC-Fehlerhülle im Body unverändert. Legacy-`/rpc` bleibt
+  bewusst bei 200+JSON für Alt-Clients (Kompat-Wächter-Test).
 
 - **Provenance trägt optional `date_applicability`** — das Stand-Datum der
   tatsächlich aufgelösten Fassung (RF-6). Damit ist ein künftiger Stichtag

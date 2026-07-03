@@ -99,7 +99,12 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   [67 §T-2](67_HARDENING_AND_SOTA_ROADMAP.md) (Lexikon-Wache code-getrieben + Namensabgleich).
 
 ### RF-5 — Redis-Passwort im Klartext im Startup-Log (Credential-Leak in Logs)
-- **Status:** 🔴 offen
+- **Status:** 🟢 behoben (2026-07-03, SOTA-T2): `RedactedRedisUrl`-Newtype in
+  `fedlex-store` (Userinfo wird beim Konstruieren durch `***` ersetzt, der
+  Rohwert nie gespeichert — `Display`/`Debug` können nicht leaken); beide
+  Logzeilen in `main.rs` umgestellt; Regressionstest
+  `password_never_survives_redaction` prüft das `:<pw>@`-Muster. Wirksam in
+  Prod mit dem nächsten Deploy.
 - **Entdeckt:** 2026-07-03, beim Prod-Smoke der Agent-UX-Welle (`kubectl logs` der frisch
   ausgerollten Reader-Pods, Digest `1703721…`).
 - **Beleg:** [`crates/mcp-reader/src/main.rs:250`](../crates/mcp-reader/src/main.rs#L250) und
@@ -163,13 +168,18 @@ Reader + semantic + skills. Die Einzelbefunde mit Behandlung:
 - **Lifecycle nicht erzwungen** (`tools/list` vor `initialize` funktioniert) — **⚪ bewusst
   verworfen.** Der Reader ist zustandslos (CQRS-Leseseite, keine `Mcp-Session-Id`);
   Handshake-Zwang brächte Session-Zustand ohne Sicherheitsgewinn (Auth gilt pro Request).
-- **Auth-Fehler als HTTP 200 + JSON-RPC-Error** (NIEDRIG) — **🟡 bekannt, geplant.** Bereits
-  dokumentierter Migrationsschritt (Runbook Phase 3.2, Kommentar am `rpc_handler`): der
-  Rückgabetyp ist vorbereitet, 401/400/403 folgen mit der Streamable-HTTP-Zielrevision.
+- **Auth-Fehler als HTTP 200 + JSON-RPC-Error** (NIEDRIG) — **🟢 behoben für `/mcp`
+  (2026-07-03, SOTA-T4):** fehlendes/ungültiges Credential → HTTP 401 +
+  `WWW-Authenticate: Bearer`, Body bleibt die JSON-RPC-Hülle; Origin→403 und
+  Protokollversion→400 galten dort schon. **Legacy-`/rpc` bleibt bewusst bei
+  200+JSON** (Alt-Clients ansV/skills prüfen den Body) — Kompat-Wächter:
+  `rpc_missing_credential_stays_http_200_for_legacy_clients`.
 - **Kein CORS-Preflight auf `/mcp`** (`OPTIONS` → 405; browserbasierte MCP-Clients können
-  nicht verbinden) — **🔴 offen, entscheidungsbedürftig.** Braucht eine bewusste
-  CORS-Policy (Origin-Allowlist existiert bereits als Guard); als Punkt für die
-  Streamable-HTTP-Arbeiten einplanen ([67](67_HARDENING_AND_SOTA_ROADMAP.md)).
+  nicht verbinden) — **🟢 behoben (2026-07-03, SOTA-T3):** `OPTIONS /mcp` bedient den
+  Preflight, CORS-Header nur für Origins der bestehenden Allowlist
+  (`MCP_ALLOWED_ORIGINS`), fremde Origins weiterhin 403, POST-Antworten an erlaubte
+  Origins tragen das CORS-Echo (`apply_cors`). Ohne konfigurierte Allowlist bleibt
+  alles fail-closed wie bisher.
 
 Positiv-Befunde der Welle (Eingabevalidierung, Injection-Neutralisierung,
 Versions-Negotiation, fail-closed Auth auf beiden Endpoints) decken sich mit den
