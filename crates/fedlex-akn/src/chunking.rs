@@ -423,8 +423,13 @@ fn push_chunk_suffixed(
     let section_path: Vec<String> = steps.iter().filter_map(|s| s.eid.clone()).collect();
     // Überschriften-Texte zum Pfad (Strategie V3/V4): `num` + `heading` je
     // Stufe; Stufen ohne beides (z.B. nackte paragraphs) entfallen.
+    // Nur ECHTE Eltern-Stufen (Thesis-Semantik `parent_heading`): die eigene
+    // Nummer/Überschrift trägt der Chunk-Text bereits — als Kontext dupliziert
+    // würde sie im Embedding-Input die Unterscheidungs-Token verwässern
+    // (am Hash-Embedder gemessen: Kollisions-Score schlug den echten Match).
     let section_headings: Vec<String> = steps
         .iter()
+        .filter(|s| s.eid.as_deref() != eid.as_deref())
         .filter_map(|s| {
             let label = [s.num.as_deref(), s.heading.as_deref()]
                 .into_iter()
@@ -843,11 +848,10 @@ mod tests {
         assert_eq!(m.language.as_deref(), Some("de"));
         assert_eq!(m.date.as_deref(), Some("2018-01-01"));
         assert_eq!(m.section_path, ["chap_1", "art_1"]);
-        // Überschriften-Texte zum Pfad (S3-Embedding-Kontext, Strategie V3/V4).
-        assert_eq!(
-            m.section_headings,
-            ["1. Kapitel: Allgemeine Bestimmungen", "Art. 1 Zweck"]
-        );
+        // Überschriften-Texte zum Pfad (S3-Embedding-Kontext, Strategie V3/V4):
+        // nur ECHTE Eltern — die eigene Nummer/Überschrift steht im Chunk-Text
+        // und würde als Kontext-Dopplung den Embedding-Input verwässern.
+        assert_eq!(m.section_headings, ["1. Kapitel: Allgemeine Bestimmungen"]);
         assert_eq!(m.eid.as_deref(), Some("art_1"));
     }
 
