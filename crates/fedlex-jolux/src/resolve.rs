@@ -22,9 +22,19 @@ pub struct SrHit {
     pub in_force: Option<bool>,
 }
 
+// Zwei Pfade zur SR-Nummer (Live-Befund 2026-07-03): `historicalLegalId`
+// tragen nur ältere Erlasse — das geltende nDSG (`eli/cc/2022/491`, SR 235.1)
+// hat **kein** SR-Literal am Erlass und ist nur über die Systematik-Taxonomie
+// (`skos:notation`, typisiert als `notation-type/id-systematique`) auffindbar.
+// Ohne den zweiten Pfad landete "SR 235.1" ausschliesslich auf dem
+// aufgehobenen DSG von 1992 — ohne Zeiger auf das geltende Recht.
 const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status WHERE {
-  ?ca a jolux:ConsolidationAbstract ;
-      jolux:historicalLegalId "__SR__" .
+  { ?ca a jolux:ConsolidationAbstract ;
+        jolux:historicalLegalId "__SR__" . }
+  UNION
+  { ?tax skos:notation "__SR__"^^<https://fedlex.data.admin.ch/vocabulary/notation-type/id-systematique> .
+    ?ca jolux:classifiedByTaxonomyEntry ?tax ;
+        a jolux:ConsolidationAbstract . }
   OPTIONAL {
     ?ca jolux:isRealizedBy ?expr .
     ?expr jolux:language <__LANGURI__> ; jolux:title ?title .
@@ -36,9 +46,10 @@ const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status WHERE {
 ///
 /// **Liefert eine Liste**, denn SR-Nummern werden wiederverwendet — 730.0
 /// zeigt auf das alte EnG (`eli/cc/1999/27`, aufgehoben) *und* das neue
-/// (`eli/cc/2017/762`). Disambiguierung über `in_force_status`
-/// (`.../enforcement-status/0` = in Kraft) bzw. [`check_in_force`].
-/// Live-verifiziert 2026-06-10.
+/// (`eli/cc/2017/762`). Geltende Erlasse stehen zuerst; Disambiguierung über
+/// `in_force` bzw. [`check_in_force`]. Gefunden wird über `historicalLegalId`
+/// **und** die Systematik-Taxonomie — neue Konsolidierungen (z.B. nDSG)
+/// tragen kein SR-Literal mehr am Erlass. Live-verifiziert 2026-07-03.
 ///
 /// Discovery-Funktion ohne Provenance. Die SR-Nummer wird entschärft
 /// eingebettet (keine SPARQL-Injection).
@@ -56,7 +67,7 @@ pub async fn resolve_sr_number(
             .replace("__LANGURI__", lang.vocab_uri())
     );
     let res = client.query(&sparql).await?;
-    let hits = res
+    let mut hits: Vec<SrHit> = res
         .bindings()
         .iter()
         .filter_map(|b| {
@@ -69,6 +80,14 @@ pub async fn resolve_sr_number(
             })
         })
         .collect();
+    // Geltendes Recht zuerst (wie search_law verspricht) — bei
+    // SR-Wiederverwendung ist der aufgehobene Alt-Erlass sonst der
+    // erstbeste Treffer.
+    hits.sort_by_key(|h| match h.in_force {
+        Some(true) => 0,
+        Some(false) => 1,
+        None => 2,
+    });
     Ok(hits)
 }
 
@@ -204,11 +223,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(hits.len(), 2, "SR-Wiederverwendung: Liste, kein Einzelwert");
-        assert_eq!(hits[1].eli, "eli/cc/2017/762");
-        assert!(hits[1].in_force_status.as_deref().unwrap().ends_with("/0"));
+        // Geltendes Recht zuerst — der aufgehobene Alt-Erlass folgt dahinter.
+        assert_eq!(hits[0].eli, "eli/cc/2017/762");
+        assert!(hits[0].in_force_status.as_deref().unwrap().ends_with("/0"));
+        assert_eq!(hits[0].in_force, Some(true));
+        assert_eq!(hits[1].eli, "eli/cc/1999/27");
 
         let q = client.last_query().unwrap();
         assert!(q.contains(r#"jolux:historicalLegalId "730.0""#));
+        // Zweiter Pfad: Systematik-Taxonomie für Erlasse ohne SR-Literal
+        // (Live-Befund 2026-07-03, nDSG).
+        assert!(q.contains(r#"skos:notation "730.0"^^"#));
+        assert!(q.contains("classifiedByTaxonomyEntry"));
         assert!(q.contains("SELECT DISTINCT"));
     }
 
