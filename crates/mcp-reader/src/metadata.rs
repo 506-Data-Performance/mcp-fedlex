@@ -225,7 +225,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Prueft, ob ein Erlass zum Stichtag der Anfrage in Kraft ist (JLX-TMP-03). Doppel-Logik: primaer ueber Datumsfelder, Fallback auf Status-Vokabular. Liefert einen BELEG (kind=norm) ueber den genannten Erlass.",
+            "description": "Prueft, ob ein Erlass zum Stichtag der Anfrage in Kraft ist (JLX-TMP-03). Doppel-Logik: primaer ueber Datumsfelder, Fallback auf Status-Vokabular. ACHTUNG zwei Zeitbezuege: in_force gilt zum STICHTAG; current_status_uri/current_status_label sind der HEUTIGE Fedlex-Vokabular-Status (nicht historisiert) — bei Stichtagsfragen zaehlt allein in_force. Liefert einen BELEG (kind=norm) ueber den genannten Erlass.",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
             },
@@ -444,7 +444,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet formale Zitationen eines Erlasses (JLX-CIT-01). Richtung: outgoing (was dieser Erlass zitiert), incoming (wer ihn zitiert), both (Default). NUR Gesamttext-Granularitaet, nie Artikel-Ebene; fuer vollstaendige Zitationsnetze JOLux mit AKN-Inline-Refs mergen. Liefert einen BELEG (kind=norm).",
+            "description": "Listet formale Zitationen eines Erlasses (JLX-CIT-01), dedupliziert nach Quellgesetz. Richtung: outgoing (was die zum Stichtag anwendbare Fassung zitiert), incoming (wer diesen Erlass in irgendeiner erfassten Fassung zitiert), both (Default). NUR Gesamttext-Granularitaet, nie Artikel-Ebene; fuer vollstaendige Zitationsnetze JOLux mit AKN-Inline-Refs mergen. Liefert einen BELEG (kind=norm).",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" },
                 "direction": { "type": "string", "enum": ["outgoing", "incoming", "both"], "default": "both" }
@@ -1043,14 +1043,20 @@ mod tests {
     }"#;
 
     /// Canned Zitationen (outgoing/incoming-Bindings).
+    /// Canned Zitationen für den Zwei-Query-Fluss (JLX-CIT-01). Der Mock
+    /// liefert für JEDE Query dasselbe Ergebnis; die Zeilen tragen darum die
+    /// Variablen aller Teilqueries: `sub` (Fassungs-Auflösung), `dst`
+    /// (ausgehend, mit Duplikat für die Dedup-Garantie) und `src` (eingehend,
+    /// zwei Fassungen desselben Quellgesetzes).
     const CITATIONS_JSON: &str = r#"{
-      "head": { "vars": ["from","to","desc"] },
+      "head": { "vars": ["sub","dst","src","desc"] },
       "results": { "bindings": [
-        { "from": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2017/762/text" },
-          "to": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/1998/3033/text" },
+        { "sub": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2017/762/text/20250101" },
+          "dst": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/1998/3033/text" },
+          "src": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2013/814/text/20251101" },
           "desc": { "type": "literal", "value": "Art. 31" } },
-        { "from": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2017/762/text" },
-          "to": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/1998/3033/text" } }
+        { "dst": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/1998/3033/text" },
+          "src": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2013/814/text/20260201" } }
       ] }
     }"#;
 
@@ -1164,19 +1170,22 @@ mod tests {
             )
             .await;
         assert!(out.get("error").is_none(), "unerwarteter Fehler: {out}");
-        // Default = both → UNION-Query.
+        // Default = both → beide Richtungen, je als kurze gebundene Query
+        // (kein UNION, kein STRSTARTS-Scan — WAF/Timeout-Betriebsregel).
         let q = client.last_query().expect("query gestellt");
-        assert!(q.contains("UNION"), "Default-Richtung nicht both: {q}");
-        // J7.4: Duplikat (from,to) entfernt → eine Zitation.
+        assert!(!q.contains("UNION"), "UNION reisst die WAF-Schwelle: {q}");
+        assert!(!q.contains("STRSTARTS"), "STRSTARTS ist ein Full-Scan: {q}");
+        // J7.4: ausgehendes Duplikat entfernt, eingehende Fassungs-Duplikate
+        // auf das Quellgesetz dedupliziert → genau zwei Zitationen.
         let cits = out["data"].as_array().expect("citations-Array");
-        assert_eq!(cits.len(), 1);
+        assert_eq!(cits.len(), 2, "war: {cits:?}");
         assert_eq!(cits[0]["description"], "Art. 31");
         assert_eq!(out["provenance"]["kind"], "norm");
         assert_eq!(out["provenance"]["eli"], "eli/cc/2017/762");
     }
 
     #[tokio::test]
-    async fn get_citations_outgoing_direction_uses_single_clause() {
+    async fn get_citations_outgoing_direction_binds_resolved_version() {
         let client = Arc::new(MockSparqlClient::from_json(CITATIONS_JSON));
         let mut r = Registry::new();
         register_metadata_tools(&mut r, Arc::clone(&client));
@@ -1187,7 +1196,13 @@ mod tests {
                 json!({ "eli": "eli/cc/2017/762", "direction": "outgoing" }),
             )
             .await;
+        // Letzte Query ist die Zitations-Zweitquery: exakt an die aufgelöste
+        // Fassungs-Text-URI gebunden statt Präfix-Scan.
         let q = client.last_query().expect("query gestellt");
+        assert!(
+            q.contains("<https://fedlex.data.admin.ch/eli/cc/2017/762/text/20250101>"),
+            "outgoing muss die aufgelöste Fassung binden: {q}"
+        );
         assert!(!q.contains("UNION"), "outgoing sollte ohne UNION sein: {q}");
     }
 
