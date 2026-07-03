@@ -581,16 +581,12 @@ where
     A: AuthResolver + Send + Sync + 'static,
     B: QuotaBackend + Send + Sync + 'static,
 {
-    let req: JsonRpcRequest = match serde_json::from_slice(&body) {
+    let req: JsonRpcRequest = match parse_request(&body) {
         Ok(r) => r,
-        Err(e) => {
+        Err(msg) => {
             // Parse-Fehler bleibt wie bisher 200 + JSON-RPC-Error-Body.
-            return Json(JsonRpcResponse::err(
-                Value::Null,
-                codes::PARSE_ERROR,
-                e.to_string(),
-            ))
-            .into_response();
+            return Json(JsonRpcResponse::err(Value::Null, codes::PARSE_ERROR, msg))
+                .into_response();
         }
     };
     // Notifications (JSON-RPC ohne `id`) bekommen **keine** Antwort-Hülle:
@@ -617,6 +613,23 @@ const ORIGIN_HEADER: &str = "origin";
 /// Liest einen Header als getrimmten `&str` (sofern vorhanden und gültiges UTF-8).
 fn header_str<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
     headers.get(name).and_then(|v| v.to_str().ok())
+}
+
+/// Parst den Request-Body und übersetzt Parse-Fehler in lenkende Meldungen.
+///
+/// JSON-RPC-**Batches** (Array-Body) wurden in MCP `2025-06-18` entfernt —
+/// die Ablehnung ist also richtig, aber der rohe serde-Fehler («invalid type:
+/// map, expected a string») verriet einem Client nicht, *was* falsch war.
+fn parse_request(body: &[u8]) -> Result<JsonRpcRequest, String> {
+    serde_json::from_slice::<JsonRpcRequest>(body).map_err(|e| {
+        if serde_json::from_slice::<Vec<Value>>(body).is_ok() {
+            "JSON-RPC batching is not supported (removed in MCP 2025-06-18); \
+             send one request per HTTP body"
+                .to_string()
+        } else {
+            e.to_string()
+        }
+    })
 }
 
 /// POST `/mcp`. Der **Streamable-HTTP-Endpoint** der Ziel-Revision `2025-11-25`
@@ -660,15 +673,11 @@ where
         return (StatusCode::BAD_REQUEST, "unsupported MCP-Protocol-Version").into_response();
     }
 
-    let req: JsonRpcRequest = match serde_json::from_slice(&body) {
+    let req: JsonRpcRequest = match parse_request(&body) {
         Ok(r) => r,
-        Err(e) => {
-            return Json(JsonRpcResponse::err(
-                Value::Null,
-                codes::PARSE_ERROR,
-                e.to_string(),
-            ))
-            .into_response();
+        Err(msg) => {
+            return Json(JsonRpcResponse::err(Value::Null, codes::PARSE_ERROR, msg))
+                .into_response();
         }
     };
     // Notifications: 202 ohne Body (wie /rpc, Runbook 5.1).
@@ -1375,6 +1384,24 @@ mod tests {
             .handle(Some("token-a"), req(1, "telepathy/read", json!({})), 0)
             .await;
         assert_eq!(resp.error.unwrap().code, codes::METHOD_NOT_FOUND);
+    }
+
+    // --- Body-Parsing: Batch-Ablehnung mit klarer Meldung ---
+
+    /// JSON-RPC-Batches sind seit MCP 2025-06-18 entfernt — die Ablehnung ist
+    /// richtig, aber statt des kryptischen serde-Fehlers («invalid type: map,
+    /// expected a string») muss der Client lesen können, WAS nicht geht.
+    #[test]
+    fn batch_request_yields_clear_unsupported_message() {
+        let body = br#"[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","id":2,"method":"ping"}]"#;
+        let err = parse_request(body).unwrap_err();
+        assert!(
+            err.contains("batching is not supported"),
+            "Meldung muss Batching benennen, war: {err}"
+        );
+        // Andere Parse-Fehler bleiben der rohe serde-Befund.
+        let err = parse_request(b"{ kaputt").unwrap_err();
+        assert!(!err.contains("batching"), "war: {err}");
     }
 
     // --- Lifecycle: ping (Migrations-Runbook Phase 5.2) ---
