@@ -127,6 +127,54 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   [CLAUDE.md](../CLAUDE.md) nicht als öffentliches Issue führen (GitHub ist öffentlicher
   Mirror); Behandlung hier + ggf. `SECURITY.md`, nicht im Bugtracker.
 
+### RF-6 — Externe Review-Welle 2026-07-03 (Agent-Test aller drei Dienste)
+
+Sammel-Eintrag: unautorisierter Agent gegen mcp-fedlex.ch (Auth/CORS/Protokoll), lokal
+Reader + semantic + skills. Die Einzelbefunde mit Behandlung:
+
+- **get_citations 15-s-Timeout** (HOCH) — **🟢 behoben.** Beleg: 3/3 reproduzierbar am DSG;
+  Ursache `FILTER(STRSTARTS(…))`-Full-Scan über den Zitationsgraphen, kein LIMIT, `Both` als
+  UNION zweier Scans. Behandlung: Zwei-Query-Muster wie JLX-IMP-01 («from»-freie
+  Stichtags-Auflösung + kurze exakt gebundene Zweitqueries, < 0,5 s live), Dedup nach
+  Quellgesetz (J7.4), Wächter `waf_guard_citation_queries`.
+  [`citations.rs`](../crates/fedlex-jolux/src/citations.rs).
+- **Zukunfts-Stichtag ungeprüft in Provenance** (MITTEL) — **🟢 behoben.**
+  `read_article(as_of=2035-01-01)` stempelte `valid_as_of: 2035-01-01`, ohne die real
+  aufgelöste Fassung auszuweisen. Behandlung: optionales Provenance-Feld
+  `date_applicability` (additiv, ADR-004-kompatibel), gesetzt von
+  `resolve_consolidation_at` und in allen AKN-Tools nachgetragen. Künftige Stichtage
+  bleiben bewusst zulässig (Fedlex führt beschlossene künftige Fassungen) — jetzt aber
+  sichtbar ehrlich. [`provenance.rs`](../crates/fedlex-core/src/provenance.rs),
+  [`tools.rs`](../crates/mcp-reader/src/tools.rs).
+- **check_in_force widerspricht sich** (MITTEL) — **🟢 behoben.** `in_force: false`
+  (Stichtag) neben `status_label: "In Kraft"` (heutiges Vokabular) unversöhnt.
+  Behandlung: Felder umbenannt zu `current_status_uri`/`current_status_label` (serde-Alias
+  für Alt-Payloads), Zeitbezug in Rustdoc + Tool-Beschreibung explizit.
+  [`temporal.rs`](../crates/fedlex-jolux/src/temporal.rs).
+- **resolve_sr_number("235.1") findet nur das aufgehobene DSG** (MITTEL) — **🟢 behoben.**
+  Das geltende nDSG (`eli/cc/2022/491`) trägt kein `historicalLegalId` mehr; die SR-Nummer
+  lebt nur noch als `skos:notation` (typisiert `notation-type/id-systematique`) der
+  Systematik-Taxonomie. Behandlung: UNION-Pfad über die Taxonomie + Sortierung
+  „geltendes Recht zuerst". Live verifiziert: 235.1 → altes DSG **und** nDSG.
+  [`resolve.rs`](../crates/fedlex-jolux/src/resolve.rs).
+- **Batch-Request → kryptischer Parse-Error** (NIEDRIG) — **🟢 behoben.** Array-Body meldet
+  jetzt klar „JSON-RPC batching is not supported (removed in MCP 2025-06-18)…" statt des
+  rohen serde-Fehlers. [`transport.rs`](../crates/mcp-reader/src/transport.rs).
+- **Lifecycle nicht erzwungen** (`tools/list` vor `initialize` funktioniert) — **⚪ bewusst
+  verworfen.** Der Reader ist zustandslos (CQRS-Leseseite, keine `Mcp-Session-Id`);
+  Handshake-Zwang brächte Session-Zustand ohne Sicherheitsgewinn (Auth gilt pro Request).
+- **Auth-Fehler als HTTP 200 + JSON-RPC-Error** (NIEDRIG) — **🟡 bekannt, geplant.** Bereits
+  dokumentierter Migrationsschritt (Runbook Phase 3.2, Kommentar am `rpc_handler`): der
+  Rückgabetyp ist vorbereitet, 401/400/403 folgen mit der Streamable-HTTP-Zielrevision.
+- **Kein CORS-Preflight auf `/mcp`** (`OPTIONS` → 405; browserbasierte MCP-Clients können
+  nicht verbinden) — **🔴 offen, entscheidungsbedürftig.** Braucht eine bewusste
+  CORS-Policy (Origin-Allowlist existiert bereits als Guard); als Punkt für die
+  Streamable-HTTP-Arbeiten einplanen ([67](67_HARDENING_AND_SOTA_ROADMAP.md)).
+
+Positiv-Befunde der Welle (Eingabevalidierung, Injection-Neutralisierung,
+Versions-Negotiation, fail-closed Auth auf beiden Endpoints) decken sich mit den
+bestehenden Tests — keine Massnahme.
+
 ---
 
 ## Triage-Regel (ein Satz)

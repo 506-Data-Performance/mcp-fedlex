@@ -7,6 +7,35 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`get_citations` lief bei Erlassen mit realem Zitationsnetz (DSG) in den
+  15-s-Timeout (RF-6):** Der `FILTER(STRSTARTS(…))`-Full-Scan über den
+  gesamten Zitationsgraphen ist durch das Zwei-Query-Muster aus JLX-IMP-01
+  ersetzt — «from»-freie Stichtags-Auflösung der Fassung, danach kurze,
+  exakt gebundene Zweitqueries (< 0,5 s live, Wächter
+  `waf_guard_citation_queries`). Ergebnisse sind neu nach Quellgesetz
+  dedupliziert (J7.4) und tragen Erlass-URIs statt `/text`-Formen.
+- **`resolve_sr_number` fand geltendes Recht ohne SR-Literal nicht (RF-6):**
+  Das nDSG (`eli/cc/2022/491`, SR 235.1) trägt kein `historicalLegalId`
+  mehr — die Auflösung läuft neu zusätzlich über die Systematik-Taxonomie
+  (`skos:notation`, typisiert) und sortiert geltendes Recht zuerst.
+- **`check_in_force` vermischte zwei Zeitbezüge (RF-6):** `status_uri`/
+  `status_label` heissen neu `current_status_uri`/`current_status_label`
+  (serde-Alias für Alt-Payloads) und sind als **heutiger** Vokabular-Status
+  ausgewiesen; stichtagsbezogen ist allein `in_force`.
+- **Batch-Requests melden neu klar** «JSON-RPC batching is not supported
+  (removed in MCP 2025-06-18)» statt des rohen serde-Parse-Fehlers (RF-6).
+
+### Added
+
+- **Provenance trägt optional `date_applicability`** — das Stand-Datum der
+  tatsächlich aufgelösten Fassung (RF-6). Damit ist ein künftiger Stichtag
+  (`as_of=2035-01-01`) nicht mehr stillschweigend als bestätigte Fassung
+  lesbar; künftige Stichtage bleiben bewusst zulässig (Fedlex führt
+  beschlossene künftige Fassungen). Additiv und abwärtskompatibel
+  (ADR-004-Hülle unverändert).
+
 ### Removed
 
 - **Verdrahtungsruinen entfernt (67 §W-1/W-2):** Die fünf vorgebauten, nie an
