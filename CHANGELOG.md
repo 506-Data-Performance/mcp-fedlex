@@ -34,6 +34,22 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **Chunking-Feinschliff für den RAG-Ingest (SOTA-T13, Strategie V3):**
+  `chunk_document` (AKN-CHK-02) rendert den Chunk-Text neu als angereicherte
+  Retrieval-Sicht — Tabellen als Markdown-Zeilen (`| a | b |` + Separator;
+  Tarife/Grenzwerte waren als Fliesstext unauffindbar), Fussnoten als
+  kompakte `[Historie: …]`-Marker am Blockende (Änderungshistorie ist
+  Suchsignal; wortinnere Fussnoten zerreissen keine Normwörter, X6.4),
+  ELI-`<ref>`s als Markdown-Links (Cross-Law-Kandidaten), `<foreign>` als
+  Alt-Text bzw. `[Formel]`/`[Grafik]` statt Markup-Rauschen (X18.4),
+  Whitespace-Normalisierung inkl. Soft-Hyphen-Hygiene, und Anhang-Chunks
+  tragen einen Kontext-Kopf mit Anhang-Titel + Bezugserlass (eigene
+  FRBR-Werke, X19.8). `ChunkMetadata` liefert zusätzlich `section_headings`
+  (Überschriften-Texte des Gliederungspfads) als Baumaterial für den
+  S3-Embedding-Input der semantic-Seite. **Zitierfähigkeit unberührt:** der
+  Renderer ist privat in `chunking.rs`, `text.rs`/`dom::text_of` liefern
+  weiter den authentischen Normtext — Wächter-Test
+  `chunk_enrichment_never_leaks_into_reader_text`.
 - **CORS-Preflight auf `/mcp` (SOTA-T3):** `OPTIONS /mcp` + CORS-Echo für
   Origins der `MCP_ALLOWED_ORIGINS`-Allowlist — browserbasierte MCP-Clients
   können verbinden; fremde Origins bleiben 403, ohne Allowlist bleibt alles

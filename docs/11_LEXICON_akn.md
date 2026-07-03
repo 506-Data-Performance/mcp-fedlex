@@ -294,12 +294,13 @@ Die Transformations-Schicht. Macht AKN-Inhalte redundanzfrei und RAG-tauglich �
 
 ### AKN-CHK-02 · chunk_document
 - **Frage:** "Zerlege das Dokument in retrieval-taugliche Einheiten mit Kontext"
-- **Signatur:** `(doc, strategy?) → [{ chunk_id, text, metadata{ sr, title, eli, lang, date, section_path, eid, collection } }]`
+- **Signatur:** `(doc, strategy?) → [{ chunk_id, text, metadata{ sr, title, eli, lang, date, section_path, section_headings, eid, collection } }]`
 - **AKN:** musterabhängige Strategie (X14.2). FLAT/STRUCTURED → Artikel, LEVEL_BASED → Level-Einheit, NO_BODY → Component-Doc, AMENDMENT → quotedStructure, OTHER → `<p>`-Gruppen.
-- **Empirie:** Chunk-Median ~550 Zeichen (~140 Tokens, X10.2). 8 Pflicht-Metadaten pro Chunk (X14.3).
-- **Falltraps:** **Chunking ist ein 5-Strategien-Problem** — 66 % der Dateien brauchen kein Artikel-Chunking (X14.4). Artikel >2'000 Zeichen am `<paragraph>` splitten. Tabellen als Einheit, Signature-Blöcke als eigene Einheit oder an den letzten Artikel (X18.7).
-- **Komposition:** ← AKN-DOC-03 (Strategie), AKN-CHK-01 (Hollowing) | → mcp-fedlex-semantic Ingest, `mcp-ingest`
-- **Status:** implementiert + konformanz-getestet (`chunk_document`, `akn_chk_02_chunks_eng`)
+- **Empirie:** Chunk-Median ~550 Zeichen (~140 Tokens, X10.2). 8 Pflicht-Metadaten pro Chunk (X14.3) + `section_headings` (Überschriften-Texte des Pfads — Baumaterial für den S3-Embedding-Input, Strategie V3/V4).
+- **Chunk-Text = Retrieval-Sicht (SOTA-T13, Strategie V3):** Tabellen als Markdown-Zeilen (`| a | b |` + Separator), Fussnoten als `[Historie: …]`-Marker am Blockende, ELI-refs als Markdown-Links, `<foreign>` als Alt-Text bzw. `[Formel]`/`[Grafik]`, Whitespace-/Soft-Hyphen-Hygiene; Anhang-Chunks tragen einen Kontext-Kopf mit Anhang-Titel + Bezugserlass (X19.8).
+- **Falltraps:** **Chunking ist ein 5-Strategien-Problem** — 66 % der Dateien brauchen kein Artikel-Chunking (X14.4). Artikel >2'000 Zeichen am `<paragraph>` splitten. Tabellen als Einheit, Signature-Blöcke als eigene Einheit oder an den letzten Artikel (X18.7). **Chunk-Text nie als Zitatquelle** — zitierfähigen Normtext liefern TXT-01/02; wortinnere Fussnoten (X6.4) wandern als Historie-Marker ans Blockende, damit Normwörter intakt bleiben.
+- **Komposition:** ← AKN-DOC-03 (Strategie), AKN-CHK-01 (Hollowing), AKN-SPC-02 (foreign-Klassifikation) | → mcp-fedlex-semantic Ingest, `mcp-ingest`
+- **Status:** implementiert + konformanz-getestet (`chunk_document`, `akn_chk_02_chunks_eng`); Zitierfähigkeits-Wächter `chunk_enrichment_never_leaks_into_reader_text`
 
 ---
 

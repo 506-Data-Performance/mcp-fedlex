@@ -1,6 +1,6 @@
 //! Primitive: Sonderinhalte (Lexikon AKN-SPC-01/02, Rulebook X13/X18).
 
-use crate::dom::AknDocument;
+use crate::dom::{AknDocument, NodeId};
 use crate::error::AknError;
 use crate::structure::resolve_eid;
 use serde::{Deserialize, Serialize};
@@ -109,29 +109,38 @@ pub fn detect_foreign_content(doc: &AknDocument) -> Vec<ForeignContent> {
     doc.find_all(doc.root(), "foreign")
         .into_iter()
         .map(|f| {
-            let inner = doc.descendants(f);
-            let tags: Vec<&str> = inner.iter().skip(1).map(|&d| doc.tag(d)).collect();
-            let has = |names: &[&str]| tags.iter().any(|t| names.contains(t));
-            let kind = if has(&["svg", "path", "rect", "g", "circle"]) {
-                ForeignKind::Svg
-            } else if has(&[
-                "math", "mrow", "mi", "mo", "mn", "mfrac", "msub", "msup", "mtext",
-            ]) {
-                ForeignKind::MathMl
-            } else if has(&["prefLabel", "altLabel", "notation", "Concept"]) {
-                ForeignKind::Skos
-            } else if has(&["AlternateContent", "Choice", "Fallback"]) {
-                ForeignKind::Ooxml
-            } else {
-                ForeignKind::Other
-            };
+            let (kind, element_count) = classify_foreign(doc, f);
             ForeignContent {
                 context_eid: doc.nearest_eid(f).map(str::to_string),
                 kind,
-                element_count: tags.len(),
+                element_count,
             }
         })
         .collect()
+}
+
+/// Klassifiziert einen einzelnen `<foreign>`-Knoten über die lokalen
+/// Tag-Namen seiner Nachfahren (X18.4 — MathML trägt keinen eigenen
+/// Namespace). Geteilt von SPC-02 und dem Chunk-Text-Renderer (AKN-CHK-02),
+/// damit beide dieselbe Erkennung nutzen. Liefert `(Art, Element-Anzahl)`.
+pub(crate) fn classify_foreign(doc: &AknDocument, f: NodeId) -> (ForeignKind, usize) {
+    let inner = doc.descendants(f);
+    let tags: Vec<&str> = inner.iter().skip(1).map(|&d| doc.tag(d)).collect();
+    let has = |names: &[&str]| tags.iter().any(|t| names.contains(t));
+    let kind = if has(&["svg", "path", "rect", "g", "circle"]) {
+        ForeignKind::Svg
+    } else if has(&[
+        "math", "mrow", "mi", "mo", "mn", "mfrac", "msub", "msup", "mtext",
+    ]) {
+        ForeignKind::MathMl
+    } else if has(&["prefLabel", "altLabel", "notation", "Concept"]) {
+        ForeignKind::Skos
+    } else if has(&["AlternateContent", "Choice", "Fallback"]) {
+        ForeignKind::Ooxml
+    } else {
+        ForeignKind::Other
+    };
+    (kind, tags.len())
 }
 
 #[cfg(test)]
