@@ -247,13 +247,17 @@ fn build_quota_backend(redis_url: &str) -> Result<RedisQuotaBackend, Box<dyn std
             let tls = fedlex_store::RedisTlsConfig::from_files(&ca, &cert, &key)?;
             let backend =
                 RedisQuotaBackend::connect_with_tls(redis_url, &tls)?.with_op_timeout(op_timeout);
-            tracing::info!(redis_url, "Quota-Redis über mTLS verbunden (ADR-005)");
+            // RF-5: URL nur redigiert loggen — REDIS_URL trägt in Prod das
+            // Passwort aus dem SealedSecret.
+            let redis_url = fedlex_store::RedactedRedisUrl::new(redis_url);
+            tracing::info!(%redis_url, "Quota-Redis über mTLS verbunden (ADR-005)");
             Ok(backend)
         }
         (None, None, None) => {
             let backend = RedisQuotaBackend::connect(redis_url)?.with_op_timeout(op_timeout);
+            let redis_url = fedlex_store::RedactedRedisUrl::new(redis_url);
             tracing::info!(
-                redis_url,
+                %redis_url,
                 "Quota-Redis im Klartext verbunden; mTLS deaktiviert (kein Zertifikatsmaterial)"
             );
             Ok(backend)

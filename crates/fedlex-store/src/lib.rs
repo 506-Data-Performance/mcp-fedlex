@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 pub mod key;
+pub mod redacted_url;
 pub mod repository;
 pub mod scratchpad;
 
@@ -25,6 +26,7 @@ pub mod redis_tls;
 pub mod oxigraph_corpus;
 
 pub use key::{KeyError, ScratchpadKey, SessionId, TenantContext, TenantId};
+pub use redacted_url::RedactedRedisUrl;
 pub use repository::TenantRepository;
 pub use scratchpad::{InMemoryScratchpad, ScratchpadStore};
 
