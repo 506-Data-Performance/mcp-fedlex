@@ -184,6 +184,16 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Fedlex-WAF blockiert «from»-Queries (live diagnostiziert 2026-07-03):**
+  Der WAF vor dem SPARQL-Endpoint weist Queries mit dem SQL-Injection-Muster
+  «SELECT … from» ab HTTP-400 zurück, sobald sie ~600 Zeichen überschreiten —
+  getroffen hat es `get_impacts`/`get_article_history` (Variable `?from` +
+  Prädikat `impactFromLegalResource`), nachdem der C-1-Label-Join die Query
+  über die Schwelle hob. Fix: Die Hauptqueries sind jetzt komplett
+  «from»-frei; die Quell-Erlasse holt eine zweite, kurze Query (unter der
+  Schwelle, live verifiziert: Art.-19-Historie korrekt, alle 114
+  EnG-Impacts mit Quelle); `OUTGOING_Q` nutzt `?src`. Regressions-Wächter:
+  `waf_guard_main_queries_avoid_from`.
 - **Vertragstitel (68 §C-4):** `get_treaty_info` lieferte leere Titel —
   `jolux:titleTreaty` ist sprach-getaggt und Fedlex trägt teils **leere**
   Sprachvarianten (live: `@en=""` am CH–DE-Vertrag 2024/0088); die Query nahm

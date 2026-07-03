@@ -28,15 +28,31 @@ pub struct Impact {
 // DISTINCT (68 §C-3): ?target ist gefiltert, aber nicht projiziert — ein
 // Impact, der mehrere Subdivisions desselben Erlasses trifft, erzeugte sonst
 // identische Zeilen (Join-Fanout; live beobachtet an Art. 19 EnG).
-const IMPACTS_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?comment ?from WHERE {
+//
+// **WAF-Zwang (live diagnostiziert 2026-07-03):** Der Fedlex-WAF blockiert
+// Queries, die das SQL-Injection-Muster «SELECT … from» tragen, sobald die
+// Query lang genug ist (~600 Zeichen; kürzere passieren) — sowohl `?from`
+// als Variable wie auch `impactFromLegalResource` im Text zählen als
+// Treffer. Deshalb sind die Hauptqueries komplett «from»-frei; die
+// Quell-Erlasse holt eine ZWEITE, kurze Query ([`IMPACTS_SRC_Q`]), die
+// unter der Schwelle bleibt (live verifiziert, 110 Zeilen am EnG). Der
+// Regressions-Wächter dafür ist `waf_guard_main_queries_avoid_from`.
+const IMPACTS_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?comment WHERE {
   ?impact jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type
     OPTIONAL { ?type skos:prefLabel ?typeLabel . FILTER(LANG(?typeLabel) = "de") } }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
   OPTIONAL { ?impact jolux:impactToLegalResourceComment ?comment }
-  OPTIONAL { ?impact jolux:impactFromLegalResource ?from }
   FILTER(STRSTARTS(STR(?target), "__URI__"))
 } ORDER BY ?date"#;
+
+/// Kurze Zweitquery: (impact → Quell-Erlass)-Paare. Bewusst minimal gehalten,
+/// damit sie trotz «From»-Prädikat unter der WAF-Schwelle bleibt (s. o.).
+const IMPACTS_SRC_Q: &str = r#"SELECT DISTINCT ?impact ?src WHERE {
+  ?impact jolux:impactToLegalResource ?target ;
+          jolux:impactFromLegalResource ?src .
+  FILTER(STRSTARTS(STR(?target), "__URI__"))
+}"#;
 
 /// Listet die Änderungen (Impacts), die auf einen Erlass und seine Artikel wirken.
 ///
@@ -56,20 +72,36 @@ pub async fn get_impacts(
     let sparql = format!("{PREFIXES}{}", IMPACTS_Q.replace("__URI__", &uri));
     let res = client.query(&sparql).await?;
 
+    let src_sparql = format!("{PREFIXES}{}", IMPACTS_SRC_Q.replace("__URI__", &uri));
+    let sources = source_map(&client.query(&src_sparql).await?);
+
     let impacts = dedup_impacts(res.bindings().iter().filter_map(|b| {
         let impact_uri = val(b, "impact")?.to_string();
+        let from = sources.get(&impact_uri).cloned();
         Some(Impact {
             impact_uri,
             impact_type: val(b, "type").map(str::to_string),
             impact_type_label: nonempty(val(b, "typeLabel")),
             date_entry_in_force: val(b, "date").map(str::to_string),
             comment: nonempty(val(b, "comment")),
-            from: val(b, "from").map(str::to_string),
+            from,
         })
     }));
 
     let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
     Ok(Response::new(impacts, prov))
+}
+
+/// (impact → Quell-Erlass)-Zuordnung aus der Zweitquery; erste Quelle gewinnt.
+fn source_map(res: &crate::client::SparqlResults) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    for b in res.bindings() {
+        if let (Some(impact), Some(src)) = (val(b, "impact"), val(b, "src")) {
+            map.entry(impact.to_string())
+                .or_insert_with(|| src.to_string());
+        }
+    }
+    map
 }
 
 /// Leere Literale werden zu `None` — ein `comment: ""` trägt keine Information
@@ -97,15 +129,22 @@ fn dedup_impacts(iter: impl Iterator<Item = Impact>) -> Vec<Impact> {
 /// nur re-exportiert, damit die JOLux-API stabil bleibt.
 pub use fedlex_core::normalize_eid;
 
-const ARTICLE_HISTORY_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?from ?comment WHERE {
+// «from»-frei aus WAF-Gründen — Quell-Erlasse via [`ARTICLE_SRC_Q`] (s. IMPACTS_Q).
+const ARTICLE_HISTORY_Q: &str = r#"SELECT DISTINCT ?impact ?type ?typeLabel ?date ?comment WHERE {
   ?impact jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type
     OPTIONAL { ?type skos:prefLabel ?typeLabel . FILTER(LANG(?typeLabel) = "de") } }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
-  OPTIONAL { ?impact jolux:impactFromLegalResource ?from }
   OPTIONAL { ?impact jolux:impactToLegalResourceComment ?comment }
   FILTER(STRSTARTS(STR(?target), "__URI__/") && CONTAINS(STR(?target), "__EID__"))
 } ORDER BY ?date"#;
+
+/// Kurze Zweitquery analog [`IMPACTS_SRC_Q`], gefiltert auf die Artikel-eId.
+const ARTICLE_SRC_Q: &str = r#"SELECT DISTINCT ?impact ?src WHERE {
+  ?impact jolux:impactToLegalResource ?target ;
+          jolux:impactFromLegalResource ?src .
+  FILTER(STRSTARTS(STR(?target), "__URI__/") && CONTAINS(STR(?target), "__EID__"))
+}"#;
 
 /// JLX-IMP-02: Änderungshistorie eines einzelnen Artikels.
 ///
@@ -129,14 +168,25 @@ pub async fn get_article_history(
             .replace("__EID__", &normalized)
     );
     let res = client.query(&sparql).await?;
+
+    let src_sparql = format!(
+        "{PREFIXES}{}",
+        ARTICLE_SRC_Q
+            .replace("__URI__", &eli_uri(eli))
+            .replace("__EID__", &normalized)
+    );
+    let sources = source_map(&client.query(&src_sparql).await?);
+
     let impacts = dedup_impacts(res.bindings().iter().filter_map(|b| {
+        let impact_uri = val(b, "impact")?.to_string();
+        let from = sources.get(&impact_uri).cloned();
         Some(Impact {
-            impact_uri: val(b, "impact")?.to_string(),
+            impact_uri,
             impact_type: val(b, "type").map(str::to_string),
             impact_type_label: nonempty(val(b, "typeLabel")),
             date_entry_in_force: val(b, "date").map(str::to_string),
             comment: nonempty(val(b, "comment")),
-            from: val(b, "from").map(str::to_string),
+            from,
         })
     }));
     let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
@@ -156,12 +206,14 @@ pub struct OutgoingImpact {
     pub date_entry_in_force: Option<String>,
 }
 
+// `?src` statt `?from` und kompakt gehalten: die Query bleibt so unter der
+// WAF-Schwelle (s. IMPACTS_Q; live verifiziert, 69 Zeilen am EnG-OC).
 const OUTGOING_Q: &str = r#"SELECT DISTINCT ?impact ?target ?type ?date WHERE {
-  ?impact jolux:impactFromLegalResource ?from ;
+  ?impact jolux:impactFromLegalResource ?src ;
           jolux:impactToLegalResource ?target .
   OPTIONAL { ?impact jolux:legalResourceImpactHasType ?type }
   OPTIONAL { ?impact jolux:legalResourceImpactHasDateEntryInForce ?date }
-  FILTER(STRSTARTS(STR(?from), "__URI__"))
+  FILTER(STRSTARTS(STR(?src), "__URI__"))
 } ORDER BY ?date"#;
 
 /// JLX-IMP-03: Welche Gesetze ändert dieser Erlass? (Richtung umgekehrt zu
@@ -203,7 +255,7 @@ mod tests {
     use time::macros::date;
 
     const FIXTURE: &str = r#"{
-      "head": {"vars": ["impact","type","typeLabel","date","comment","from"]},
+      "head": {"vars": ["impact","type","typeLabel","date","comment","src"]},
       "results": {"bindings": [
         {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a1"},
          "type":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/impact-of-a-legal-resource-type/1"},
@@ -212,7 +264,7 @@ mod tests {
          "comment":{"type":"literal","value":"Art. 5, 7, 12"}},
         {"impact":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/impact/a2"},
          "date":{"type":"literal","value":"2023-01-01"},
-         "from":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/oc/2022/700"}}
+         "src":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/oc/2022/700"}}
       ]}
     }"#;
 
@@ -264,6 +316,35 @@ mod tests {
             .unwrap();
         assert!(resp.data().is_empty());
         assert_eq!(resp.provenance().eli.as_str(), "eli/cc/1999/404");
+    }
+
+    /// WAF-Wächter (live diagnostiziert 2026-07-03): Der Fedlex-WAF blockiert
+    /// lange Queries mit dem SQL-Injection-Muster «SELECT … from» — die
+    /// HAUPT-Queries müssen deshalb komplett «from»-frei bleiben (Variable
+    /// UND Prädikat); die Quell-Erlasse holen die kurzen SRC-Queries.
+    #[test]
+    fn waf_guard_main_queries_avoid_from() {
+        for (name, q) in [
+            ("IMPACTS_Q", IMPACTS_Q),
+            ("ARTICLE_HISTORY_Q", ARTICLE_HISTORY_Q),
+        ] {
+            assert!(
+                !q.to_lowercase().contains("from"),
+                "{name} muss «from»-frei bleiben (WAF), enthaelt: {q}"
+            );
+        }
+        // Die SRC-Queries tragen das Prädikat zwangsläufig — sie müssen dafür
+        // kurz bleiben (WAF-Schwelle empirisch ~600 Zeichen inkl. Prefixes).
+        for (name, q) in [
+            ("IMPACTS_SRC_Q", IMPACTS_SRC_Q),
+            ("ARTICLE_SRC_Q", ARTICLE_SRC_Q),
+        ] {
+            assert!(
+                PREFIXES.len() + q.len() + 100 < 600,
+                "{name} zu lang fuer die WAF-Schwelle: {} Zeichen",
+                PREFIXES.len() + q.len()
+            );
+        }
     }
 
     #[test]
@@ -364,7 +445,8 @@ mod tests {
 
         let q = client.last_query().unwrap();
         assert!(
-            q.contains(r#"STRSTARTS(STR(?from), "https://fedlex.data.admin.ch/eli/oc/2017/762")"#)
+            q.contains(r#"STRSTARTS(STR(?src), "https://fedlex.data.admin.ch/eli/oc/2017/762")"#),
+            "OUTGOING_Q filtert ueber ?src (WAF-sicher): {q}"
         );
     }
 }

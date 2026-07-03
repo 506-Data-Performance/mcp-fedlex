@@ -161,6 +161,11 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 - **Wirkung:** Der Agent zählt Änderungen doppelt («Art. 19 wurde zweimal geändert»).
 - **Behandlung:** `DISTINCT` bzw. Dedup nach `impact_uri` in JLX-MOD-Query prüfen
   (vermutlich Join-Fanout über Sprachen); leere `comment`-Felder weglassen.
+- **Nachtrag (2026-07-03):** Die Verifikation deckte eine zweite Falle auf —
+  der Fedlex-WAF blockiert lange Queries mit dem Muster «SELECT … from»
+  (HTTP 400 ab ~600 Zeichen; `?from` wie `impactFromLegalResource` zählen).
+  Die Impact-Hauptqueries sind seither «from»-frei, die Quell-Erlasse kommen
+  aus einer kurzen Zweitquery; Wächter `waf_guard_main_queries_avoid_from`.
 
 ### C-4 · Verträge ohne Titel 🟢 (`174cf0f`)
 
