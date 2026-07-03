@@ -69,6 +69,37 @@ Querschnitt-Invarianten (gelten für **jedes** Primitiv, werden nicht wiederholt
 - **OPTIONAL-Pflicht.** Kein Feld ist garantiert befüllt (J17.2). Fehlende Felder sind Daten, keine Fehler.
 - **eId-Normalisierung** vor jedem JOLux↔AKN-Abgleich. `_([a-z])($|/)` → `$1$2` (J18.2).
 - **Graceful Failure.** `{ error, hint }`, nie Crash.
+- **WAF-sichere Query-Autorenschaft.** Kein «from» (Variable oder Prädikatsname) in langen Queries — siehe [Betriebsregel WAF](#betriebsregel-die-fedlex-waf).
+
+## Betriebsregel: Die Fedlex-WAF
+
+Vor dem SPARQL-Endpoint sitzt eine Web Application Firewall des Bundes (BIT),
+die Requests heuristisch auf SQL-Injection-Muster scort. **Legitime
+SPARQL-Queries können dabei als Angriff eingestuft werden (HTTP 400 mit
+HTML-Fehlerseite statt JSON).** Zwei Live-Vorfälle:
+
+| Datum | Auslöser | Betroffen | Behandlung |
+|---|---|---|---|
+| 2026-06-10 | `SELECT DISTINCT` + `citationFromLegalResource` + URL-Literal | JLX-CIT-01 | `get_citations` fragt ohne DISTINCT ab, dedupliziert clientseitig |
+| 2026-07-03 | «SELECT … from»-Muster ab ~600 Zeichen Query-Länge — `?from` als Variable **und** `impactFromLegalResource` im Text zählen als Treffer (Bisektion: Junk-Variable gleicher Länge passiert, `?from` nicht) | JLX-IMP-01/02 (nachdem der Label-Join die Query über die Schwelle hob; auch die kürzere Altform wird seither geblockt) | Hauptqueries komplett «from»-frei; Quell-Erlasse via kurzer Zweitquery unter der Schwelle; `OUTGOING_Q` nutzt `?src` |
+
+**Autoren-Regeln daraus (test-verankert in `waf_guard_main_queries_avoid_from`):**
+
+1. **Kein «from»** — weder als Variablenname (`?from` → `?src`) noch, wo
+   vermeidbar, als Prädikat in langen Queries. Prädikate mit «From» im Namen
+   (`impactFromLegalResource`, `citationFromLegalResource`) nur in **kurzen**
+   Queries verwenden (empirisch < ~600 Zeichen inkl. Prefixes) — nötigenfalls
+   als separate Zweitquery mit clientseitigem Join.
+2. **Score-Denken:** Die WAF blockt nicht ein Signal, sondern eine Summe
+   (Schlüsselwort + Länge + Literale). Eine Query, die heute knapp passiert,
+   kann nach der nächsten Erweiterung geblockt werden.
+3. **Beweglisches Ziel:** Schwellen/Regeln ändern sich ohne Ankündigung
+   (zwischen 2026-07-02 und 2026-07-03 beobachtet). Frühwarnsystem ist der
+   Live-Konformanzlauf (2×/Woche); bei neuen 400ern mit HTML-Body zuerst an
+   die WAF denken, nicht an die eigene Query-Syntax.
+4. Diagnose-Muster: Query **minimieren** bis 200, dann Elemente einzeln
+   zurücklegen; Kontrollprobe mit inhaltsgleicher Junk-Variable trennt
+   Signatur- von Längeneffekten.
 
 ---
 
@@ -189,7 +220,7 @@ Die formale Änderungshistorie. `OC-Erlass → Impact → CC-Subdivision` (J6.1)
 - **Signatur:** `(eli, since?, until?) → [{ impact, source_act, target { subdivision | comment }, type, date_entry_in_force, source_system }]`
 - **JOLux:** `LegalResourceImpact`, `impactFromLegalResource`, `impactToLegalResource`, `legalResourceImpactHasType` (28 Typen. Änderung 56.5 %, Inkrafttreten 16.4 %, Aufhebung 8.7 %), `legalResourceImpactHasDateEntryInForce`, `impactConsolidatedBy`, `informationSource`
 - **Empirie:** 306'526 Impacts. Drei Quellsysteme koexistieren (geschaeftsstaende 63.9 %, mutation 26.9 %, legiconso 9.2 %) (J6.2).
-- **Falltraps:** **Systembruch 2023.** Seither dominiert wieder Freitext (`impactToLegalResourceComment`, "Art. 5, 7, 12") statt strukturierter Subdivisions — Comment-Parsing ist Pflicht, kein Nice-to-have (J6.4). 38'701 Impacts NUR als Comment.
+- **Falltraps:** **Systembruch 2023.** Seither dominiert wieder Freitext (`impactToLegalResourceComment`, "Art. 5, 7, 12") statt strukturierter Subdivisions — Comment-Parsing ist Pflicht, kein Nice-to-have (J6.4). 38'701 Impacts NUR als Comment. ⚡ WAF: Hauptquery muss «from»-frei bleiben, Quell-Erlasse via Zweitquery ([Betriebsregel WAF](#betriebsregel-die-fedlex-waf), *Live-Befund 2026-07-03*).
 - **Komposition:** ← JLX-RES-03 | → JLX-IMP-02, JLX-PUB-01 (source_act ist OC)
 - **Status:** implementiert + konformanz-getestet (`get_impacts`, `jlx_imp_01`)
 
@@ -198,7 +229,7 @@ Die formale Änderungshistorie. `OC-Erlass → Impact → CC-Subdivision` (J6.1)
 - **Signatur:** `(eli, eid) → [{ type, date, source_act, comment? }]`
 - **JOLux:** Impacts gefiltert auf Subdivision-URI (normalisierte eId)
 - **Empirie:** Einzige Quelle für **historisch aufgehobene Artikel** — das aktuelle AKN-XML enthält sie nicht mehr (OR: 36 aufgehobene Artikel) (J6.5).
-- **Falltraps:** eId-Normalisierung zwingend (`art_14_a` → `art_14a`, J18.2). Nach 2023 ggf. nur via Comment-Parsing auffindbar.
+- **Falltraps:** eId-Normalisierung zwingend (`art_14_a` → `art_14a`, J18.2). Nach 2023 ggf. nur via Comment-Parsing auffindbar. ⚡ WAF wie IMP-01 (Zweitquery für Quell-Erlasse).
 - **Komposition:** ← JLX-SUB-01 oder AKN-eId | → AKN `get_article_text` (Vorher/Nachher-Vergleich)
 - **Status:** implementiert + konformanz-getestet (`get_article_history`, `jlx_imp_02`)
 
@@ -493,5 +524,6 @@ und Phantom-Wachen laufen zusätzlich als Roh-Queries weiter.
 
 | Datum | Ergebnis | Befunde |
 |---|---|---|
+| 2026-07-03 | Live-Diagnose (ausserplanmässig) | WAF blockt «SELECT … from» ab ~600 Zeichen — traf JLX-IMP-01/02 nach dem C-1-Label-Join; auch die Altform wird seither geblockt. Fix: «from»-freie Hauptqueries + kurze Quell-Zweitquery. Regeln verallgemeinert in [Betriebsregel WAF](#betriebsregel-die-fedlex-waf). |
 | 2026-06-10 | 29/29 pass (E2E) | Alle 27 Primitive in Rust implementiert, Suite von Pattern-Checks auf Ende-zu-Ende-Aufrufe umgestellt. Neue Befunde. (1) Die WAF blockt `SELECT DISTINCT` + `citationFromLegalResource` + URL-Literal (HTTP 400) — `get_citations` dedupliziert clientseitig. (2) EnG hat keine Annex-Subdivisions, Annex-Existenz wird systemweit geprüft. (3) Vernehmlassungs-Termine und Federführung liegen nur auf `hasSubTask`-Tasks. |
 | 2026-06-10 | 29/29 pass (Pattern) | Erstlauf fand 4 Abweichungen. (1) Titel-Bug in `search_law`/`get_law_metadata` (Consolidation- statt CA-Expression) — **behoben**. (2) SR-Wiederverwendung (730.0 → 2 CAs) → RES-01 liefert Liste. (3) `descriptionFrom` inzwischen befüllt (J7.2 überholt). (4) `cogni:*` inzwischen öffentlich (J16.2 überholt). |

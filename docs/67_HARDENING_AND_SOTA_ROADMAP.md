@@ -13,7 +13,8 @@
 > (Commits `17a93f2…9537cc7`, jeder mit Test-Abnahme; CI-Gleichlauf durchgehend grün).
 > Danach: **P-1** umgesetzt (ADR-009 inkl. Konsumenten-Nachzug) und **P-5** über
 > [68 §B-1/B-2](68_AGENT_UX_FINDINGS.md) gelöst. Offen bleiben: **P-3**
-> (OAuth-Discovery-Fassade) und **P-4** (`resources`, Produktentscheidung).
+> (OAuth-Discovery-Fassade), **P-4** (`resources`, Produktentscheidung) und
+> **P-6** (A2A-Anschlussfähigkeit — Einschätzung liegt vor, Entscheid offen).
 
 ---
 
@@ -206,6 +207,39 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
   liegt tot in `xml_engine.rs:158-173`.
 - **Abnahme:** Cursor-Parameter für die großen Tools, Grenzen dokumentiert; verhindert
   Context-Overflow der Agenten.
+
+### P-6 — A2A-Anschlussfähigkeit (Google Agent2Agent) 🔴 **P3** *(Produktentscheidung; Einschätzung 2026-07-03)*
+- **Kontext:** A2A (von Google initiiert, inzwischen Linux Foundation) ist das
+  Protokoll für **Agent↔Agent**-Kommunikation: Agent Card unter `/.well-known/`,
+  Task-Lebenszyklus (submitted→working→completed), Artefakte, SSE-Streaming,
+  Push-Notifications. Es positioniert sich selbst als **komplementär zu MCP**:
+  MCP verbindet ein Modell mit *Werkzeugen*, A2A verbindet *autonome Agenten*
+  untereinander (Delegation langlaufender, zustandsbehafteter Aufgaben an
+  opake Gegenüber).
+- **Einschätzung für dieses Repo:** mcp-fedlex ist bewusst ein **Werkzeug**,
+  kein Agent — zustandslos, read-only, synchrone Sub-Sekunden-Antworten,
+  keine eigene Planungs- oder Delegationslogik. Die Tools in einen
+  A2A-Task-Lebenszyklus zu verpacken, würde die falsche Abstraktion kaufen
+  (Task-Store, Streaming-Status für Aufrufe, die in 200 ms fertig sind) und
+  keinen Konsumenten gewinnen: Agenten-Frameworks sprechen für Tool-Zugriff
+  MCP. **Ein A2A-Endpunkt gehört nicht in den Reader.**
+- **Wo A2A im Ökosystem stattdessen hingehört:** eine Ebene höher. Ein
+  «Fedlex-Recherche-Agent» (mehrstufige Recherche mit Norm-Belegen als
+  Artefakt — naheliegend in ansV bzw. als eigenes Binary neben
+  semantic-fedlex) wäre ein echter A2A-Kandidat: langlaufend, delegierbar,
+  mit Agent Card «kann Schweizer Bundesrecht zeitpunktgenau belegen». Dieser
+  Agent konsumiert mcp-fedlex dann **via MCP** — genau die Arbeitsteilung,
+  die beide Protokolle vorsehen.
+- **«Fit machen» heisst konkret (und ist grösstenteils schon erfüllt):**
+  (1) Domänen-Crates transportfrei halten ✅ (Invariante) — ein A2A-Binary
+  könnte sie direkt einbetten; (2) saubere HTTP-Auth-Fassade mit
+  `.well-known`-Discovery = **P-3**, dieselbe Vorleistung, die auch eine
+  Agent Card bräuchte; (3) Provenance/`isError`-Formen sind bereits
+  artefakt-tauglich (ADR-009). Es gibt **nichts**, was A2A später blockiert.
+- **Abnahme:** Entscheid dokumentieren (dieser Eintrag; bei Bau eines
+  Recherche-Agenten → eigenes ADR im dortigen Repo). Kein Code in diesem
+  Repo, solange kein konkreter A2A-Konsument benannt ist — Wiedervorlage,
+  wenn ein Partner-Agent Delegation anfragt oder ansV agentisch wird.
 
 ---
 

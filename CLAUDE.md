@@ -50,6 +50,10 @@ npx -y @modelcontextprotocol/inspector --config inspector.json --server fedlex
 - **Least-Privilege-Pools** (ADR-006/007): jedes neue Tool braucht einen `ToolPool` **und** einen Eintrag in der Projektions-Matrix (`crates/mcp-reader/tests/lexicon_projection.rs`), sonst wird der Test rot.
 - **fail-closed**: Auth- und Quota-Pfade verweigern im Zweifel.
 - Domänen-Crates bleiben **transportfrei** (client/WASM- wie serverseitig nutzbar).
+- **SPARQL WAF-sicher**: kein «from» (Variable/Prädikat) in langen Queries — die
+  Fedlex-WAF blockt das SQL-Injection-Muster «SELECT … from» ab ~600 Zeichen
+  (Betriebsregel + Autoren-Regeln: `docs/10_LEXICON_jolux.md` §Betriebsregel WAF;
+  Wächter: `waf_guard_main_queries_avoid_from`).
 
 ## Wo was liegt
 
