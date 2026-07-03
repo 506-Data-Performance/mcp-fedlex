@@ -642,12 +642,15 @@ fn parse_request(body: &[u8]) -> Result<JsonRpcRequest, String> {
 /// 2. **`MCP-Protocol-Version`-Header → HTTP 400** bei gesetzter, aber **nicht**
 ///    unterstützter Version (`2025-06-18` #8). Fehlt der Header, gilt
 ///    Spec-SHOULD-Rückwärtskompatibilität (kein Fehler).
+/// 3. **Auth-Fehler → HTTP 401** (`WWW-Authenticate: Bearer`), Body bleibt die
+///    JSON-RPC-Fehlerhülle (RF-6/T4). Nur auf `/mcp` — Legacy-`/rpc` bleibt
+///    für Alt-Clients (ansV, skills) bei 200+JSON.
 ///
 /// Die Reihenfolge ist bewusst: Origin (Netzwerk-Herkunft) vor Versions-Semantik.
 /// Notifications (kein `id`) werden — wie auf `/rpc` — mit **202** ohne Body
 /// quittiert. Alles Übrige läuft durch dieselbe [`McpService::handle`]-Kette
-/// (Auth, Quota, Provenance), sodass der einzige Unterschied zu `/rpc` die
-/// Transport-Wächter sind.
+/// (Auth, Quota, Provenance). Antworten an erlaubte Browser-Origins tragen
+/// die CORS-Header ([`apply_cors`], RF-6-Punkt «kein Preflight»).
 async fn mcp_handler<A, B>(
     State(svc): State<Arc<McpService<A, B>>>,
     headers: HeaderMap,
@@ -659,34 +662,119 @@ where
 {
     // (1) Origin zuerst: fremde Browser-Herkunft wird hart mit 403 abgewiesen,
     //     bevor Body oder Auth überhaupt betrachtet werden.
-    if let OriginOutcome::Forbidden =
-        classify_origin(header_str(&headers, ORIGIN_HEADER), svc.allowed_origins())
-    {
+    let origin = header_str(&headers, ORIGIN_HEADER);
+    if let OriginOutcome::Forbidden = classify_origin(origin, svc.allowed_origins()) {
         return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
     }
+    // Ab hier ist ein gesetzter Origin zwingend erlaubt → CORS-Echo für
+    // Browser-Clients (Server-zu-Server-Clients ohne Origin bleiben pur).
+    let cors_origin = origin.map(str::to_owned);
 
     // (2) Protokollversion im Header: gesetzt-aber-unbekannt → 400. Fehlt der
     //     Header, gilt Rückwärtskompatibilität (Spec-SHOULD, kein Fehler).
     if let ProtocolHeaderOutcome::Unsupported =
         classify_protocol_header(header_str(&headers, MCP_PROTOCOL_VERSION_HEADER))
     {
-        return (StatusCode::BAD_REQUEST, "unsupported MCP-Protocol-Version").into_response();
+        return apply_cors(
+            (StatusCode::BAD_REQUEST, "unsupported MCP-Protocol-Version").into_response(),
+            cors_origin.as_deref(),
+        );
     }
 
     let req: JsonRpcRequest = match parse_request(&body) {
         Ok(r) => r,
         Err(msg) => {
-            return Json(JsonRpcResponse::err(Value::Null, codes::PARSE_ERROR, msg))
-                .into_response();
+            return apply_cors(
+                Json(JsonRpcResponse::err(Value::Null, codes::PARSE_ERROR, msg)).into_response(),
+                cors_origin.as_deref(),
+            );
         }
     };
     // Notifications: 202 ohne Body (wie /rpc, Runbook 5.1).
     if req.is_notification() {
-        return StatusCode::ACCEPTED.into_response();
+        return apply_cors(StatusCode::ACCEPTED.into_response(), cors_origin.as_deref());
     }
 
     let cred = bearer(&headers);
-    Json(svc.handle(cred.as_deref(), req, now_ms()).await).into_response()
+    let rpc = svc.handle(cred.as_deref(), req, now_ms()).await;
+    // (3) Auth-Fehler als HTTP-Status sichtbar machen (Streamable-HTTP-Ziel,
+    //     Runbook 3.2): Clients, die auf 401 prüfen, erkennen das Problem —
+    //     der JSON-RPC-Body bleibt für informierte Clients identisch.
+    let unauthorized = rpc
+        .error
+        .as_ref()
+        .is_some_and(|e| e.code == codes::UNAUTHORIZED);
+    let mut response = if unauthorized {
+        let mut r = (StatusCode::UNAUTHORIZED, Json(rpc)).into_response();
+        r.headers_mut().insert(
+            axum::http::header::WWW_AUTHENTICATE,
+            axum::http::HeaderValue::from_static("Bearer"),
+        );
+        r
+    } else {
+        Json(rpc).into_response()
+    };
+    response = apply_cors(response, cors_origin.as_deref());
+    response
+}
+
+/// OPTIONS `/mcp` — CORS-Preflight für browserbasierte MCP-Clients (RF-6).
+///
+/// Nur Origins der Allowlist erhalten eine Freigabe; fremde Origins werden wie
+/// beim POST mit 403 abgewiesen, fehlender Origin (kein Browser) bekommt ein
+/// leeres 204. Die Allow-Header decken den MCP-Wire-Vertrag ab
+/// (Authorization, Content-Type, MCP-Protocol-Version).
+async fn mcp_options_handler<A, B>(
+    State(svc): State<Arc<McpService<A, B>>>,
+    headers: HeaderMap,
+) -> Response
+where
+    A: AuthResolver + Send + Sync + 'static,
+    B: QuotaBackend + Send + Sync + 'static,
+{
+    let origin = header_str(&headers, ORIGIN_HEADER);
+    match classify_origin(origin, svc.allowed_origins()) {
+        OriginOutcome::Forbidden => (StatusCode::FORBIDDEN, "origin not allowed").into_response(),
+        OriginOutcome::Absent => StatusCode::NO_CONTENT.into_response(),
+        OriginOutcome::Allowed => {
+            let mut response = StatusCode::NO_CONTENT.into_response();
+            let h = response.headers_mut();
+            h.insert(
+                "access-control-allow-methods",
+                axum::http::HeaderValue::from_static("POST, OPTIONS"),
+            );
+            h.insert(
+                "access-control-allow-headers",
+                axum::http::HeaderValue::from_static(
+                    "authorization, content-type, mcp-protocol-version",
+                ),
+            );
+            h.insert(
+                "access-control-max-age",
+                axum::http::HeaderValue::from_static("86400"),
+            );
+            apply_cors(response, origin)
+        }
+    }
+}
+
+/// Hängt die CORS-Antwort-Header an, wenn ein (bereits als erlaubt geprüfter)
+/// `Origin` vorliegt. `Vary: Origin` hält Caches korrekt, die Expose-Header
+/// machen die Protokollversion für Browser-JS lesbar.
+fn apply_cors(mut response: Response, allowed_origin: Option<&str>) -> Response {
+    if let Some(value) = allowed_origin.and_then(|o| axum::http::HeaderValue::from_str(o).ok()) {
+        let h = response.headers_mut();
+        h.insert("access-control-allow-origin", value);
+        h.insert(
+            axum::http::header::VARY,
+            axum::http::HeaderValue::from_static("Origin"),
+        );
+        h.insert(
+            "access-control-expose-headers",
+            axum::http::HeaderValue::from_static("mcp-protocol-version"),
+        );
+    }
+    response
 }
 
 /// GET `/sse`. Eröffnet den Ereignis-Strom und nennt die POST-Adresse.
@@ -710,8 +798,12 @@ where
         .route("/sse", get(sse_handler))
         .route("/rpc", post(rpc_handler::<A, B>))
         // Streamable-HTTP-Endpoint der Ziel-Revision `2025-11-25` (ADR-008 §B-2):
-        // setzt `Origin` (→403) und `MCP-Protocol-Version` (→400) live durch.
-        .route("/mcp", post(mcp_handler::<A, B>))
+        // setzt `Origin` (→403), `MCP-Protocol-Version` (→400) und Auth (→401)
+        // live durch; OPTIONS bedient den CORS-Preflight der Browser-Clients.
+        .route(
+            "/mcp",
+            post(mcp_handler::<A, B>).options(mcp_options_handler::<A, B>),
+        )
         .with_state(service)
 }
 
@@ -1695,11 +1787,174 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+        // Browser-Client (Origin erlaubt) → CORS-Echo auf der Antwort (T3).
+        assert_eq!(
+            resp.headers()
+                .get("access-control-allow-origin")
+                .and_then(|v| v.to_str().ok()),
+            Some("https://app.mindful.bio")
+        );
+        assert_eq!(
+            resp.headers().get("vary").and_then(|v| v.to_str().ok()),
+            Some("Origin")
+        );
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
         let v: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v["result"]["tools"][0]["name"], "read_article");
+    }
+
+    // --- T3: CORS-Preflight für Browser-MCP-Clients (RF-6) ---
+
+    #[tokio::test]
+    async fn mcp_options_preflight_serves_allowed_origin() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let svc = Arc::new(service_with_origins(
+            MockBackend::allowing(),
+            vec!["https://app.mindful.bio".to_string()],
+        ));
+        let app = router(svc);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/mcp")
+                    .header("origin", "https://app.mindful.bio")
+                    .header("access-control-request-method", "POST")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let h = resp.headers();
+        assert_eq!(
+            h.get("access-control-allow-origin")
+                .and_then(|v| v.to_str().ok()),
+            Some("https://app.mindful.bio")
+        );
+        let allow_headers = h
+            .get("access-control-allow-headers")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        for needed in ["authorization", "content-type", "mcp-protocol-version"] {
+            assert!(allow_headers.contains(needed), "fehlt: {needed}");
+        }
+        assert!(h.get("access-control-max-age").is_some());
+    }
+
+    #[tokio::test]
+    async fn mcp_options_preflight_rejects_foreign_origin() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let svc = Arc::new(service_with_origins(
+            MockBackend::allowing(),
+            vec!["https://app.mindful.bio".to_string()],
+        ));
+        let app = router(svc);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/mcp")
+                    .header("origin", "https://evil.example")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "fremder Origin darf kein CORS-Echo bekommen"
+        );
+    }
+
+    // --- T4: Auth-Fehler als HTTP 401 auf /mcp (Runbook 3.2-Ziel) ---
+
+    #[tokio::test]
+    async fn mcp_missing_credential_is_http_401_with_www_authenticate() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let svc = Arc::new(service_with_origins(MockBackend::allowing(), vec![]));
+        let app = router(svc);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "jsonrpc": "2.0", "id": 1, "method": "tools/list"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            resp.headers()
+                .get("www-authenticate")
+                .and_then(|v| v.to_str().ok()),
+            Some("Bearer")
+        );
+        // Der JSON-RPC-Body bleibt identisch — informierte Clients sehen
+        // weiterhin die Fehlerhülle.
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["error"]["code"], codes::UNAUTHORIZED);
+    }
+
+    /// Kompat-Wächter: Legacy-`/rpc` bleibt bei HTTP 200 + JSON-RPC-Error —
+    /// die Alt-Clients (ansV `McpClient`, skills) prüfen den Body, nicht den
+    /// Status. Der 401-Pfad gilt NUR für `/mcp`.
+    #[tokio::test]
+    async fn rpc_missing_credential_stays_http_200_for_legacy_clients() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let svc = Arc::new(service(MockBackend::allowing()));
+        let app = router(svc);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/rpc")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "jsonrpc": "2.0", "id": 1, "method": "tools/list"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["error"]["code"], codes::UNAUTHORIZED);
     }
 
     #[tokio::test]
