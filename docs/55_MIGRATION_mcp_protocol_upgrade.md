@@ -22,7 +22,7 @@
 ## 0. Warum „extrem vorsichtig" hier berechtigt ist
 
 Der Reader ist **produktiv** (`https://mcp-fedlex.ch`) und hat **zwei echte Rust-Konsumenten
-in Produktion**: die ansV-Plattform (`ansv-fedlex::McpClient`) und syllogismus-fedlex
+in Produktion**: die ansV-Plattform (`ansv-fedlex::McpClient`) und mcp-fedlex-skills
 (`McpFedlexClient`). **Beide** rufen direkt `POST /rpc` **ohne `initialize`** — ein unsauberes
 Upgrade bricht nicht nur den Server, sondern die belegbare Gutachten-Kette beider Konsumenten.
 
@@ -37,8 +37,8 @@ Upgrade bricht nicht nur den Server, sondern die belegbare Gutachten-Kette beide
 | Server | Auth: Bearer/JWT pro Request, fail-closed | ADR-002, `transport.rs` (`auth.verify`) |
 | **Konsument 1** | ansV `McpClient` ruft **direkt** `POST {base}/rpc` mit `tools/list`/`tools/call` | `ansV/crates/ansv-fedlex/src/client.rs` |
 | **Konsument 1** | ansV ruft **kein `initialize`** — handelt also heute **keine Version aus** | `client.rs` (nur `rpc("tools/list"/"tools/call")`) |
-| **Konsument 2** | syllogismus-fedlex `McpFedlexClient` ruft **direkt** `POST {base}/rpc` mit `tools/call` (`read_article`) | `syllogismus-fedlex/src/mcp_client.rs` |
-| **Konsument 2** | syllogismus-fedlex ruft ebenfalls **kein `initialize`** — gleiches additiv-kompatibles Muster wie ansV | `mcp_client.rs` (`fetch_norm` → `tools/call`) |
+| **Konsument 2** | mcp-fedlex-skills `McpFedlexClient` ruft **direkt** `POST {base}/rpc` mit `tools/call` (`read_article`) | `mcp-fedlex-skills/src/mcp_client.rs` |
+| **Konsument 2** | mcp-fedlex-skills ruft ebenfalls **kein `initialize`** — gleiches additiv-kompatibles Muster wie ansV | `mcp_client.rs` (`fetch_norm` → `tools/call`) |
 | Konsument | Live-Test gegen `https://mcp-fedlex.ch`, gated durch `MCP_FEDLEX_JWT` | `ansv-fedlex/tests/live.rs` |
 | Konsument | E2E-Mock bildet `/rpc` mit `tools/list`+`tools/call` nach | `ansv-fedlex/tests/e2e_belegkette.rs` |
 | Infra | Öffentlich via Ingress `mcp-fedlex.ch` | `k3-infra/.../mcp-fedlex/ingress.yaml` |
@@ -51,7 +51,7 @@ Upgrade bricht nicht nur den Server, sondern die belegbare Gutachten-Kette beide
 > dauerhaft neben dem neuen am Leben zu halten macht das System nur komplizierter und fehleranfälliger,
 > nicht besser. „Vorsichtig" heißt hier **nicht** Rückwärtskompatibilität, sondern: **koordinierter,
 > einmaliger Umstieg** mit Gates, Tests und Rollback-Anker, damit wir beim Wechsel nichts
-> **verschlechtern**. Weil **beide** Konsumenten (ansV, syllogismus-fedlex) heute **ohne `initialize`**
+> **verschlechtern**. Weil **beide** Konsumenten (ansV, mcp-fedlex-skills) heute **ohne `initialize`**
 > und **direkt auf `/rpc`** arbeiten, werden sie **im selben Zug** auf den neuen Stand gezogen — die
 > Reihenfolge (Clients bereit → Server-Umstieg) ist das Sicherheitsnetz, nicht ein zweiter Dauerpfad.
 > Die `2024-11-05`-Baseline-Tests bleiben als **Vorher-Vergleich** erhalten (Regressions-Sichtbarkeit),
@@ -80,13 +80,13 @@ Upgrade bricht nicht nur den Server, sondern die belegbare Gutachten-Kette beide
 - [x] **0.4 Konsumenten-Inventar abgeschlossen.** Verifiziert per grep über **alle** Repos
       (`mcp-fedlex.ch` / `McpClient` / `MCP_FEDLEX_URL`). **Zwei** Produktions-Rust-Konsumenten,
       beide direkt `/rpc` **ohne `initialize`**: (1) ansV `ansv-fedlex::McpClient`, (2)
-      syllogismus-fedlex `McpFedlexClient` (`mcp_client.rs`, `tools/call read_article`). Kein
+      mcp-fedlex-skills `McpFedlexClient` (`mcp_client.rs`, `tools/call read_article`). Kein
       weiterer Protokoll-Client; `mcp-fedlex-web` ist statische Doku-Site (siehe Ist-Tabelle §0).
       *(2026-06-20)*
 - [x] **0.5 Abbruchkriterien definiert.** Die Migration **pausiert sofort** (mit Rollback der
       laufenden Phase), wenn **eines** zutrifft:
       1. Baseline-Konformanz (1.1/1.2) oder Lexicon-Projektion rot;
-      2. ansV-E2E (`e2e_belegkette.rs`) **oder** syllogismus-fedlex-Normbezug bricht;
+      2. ansV-E2E (`e2e_belegkette.rs`) **oder** mcp-fedlex-skills-Normbezug bricht;
       3. ein fail-closed-Negativtest (Auth/ADR-002) wird grün-durchlässig;
       4. Quota-Kette (ADR-007) wird umgangen oder Daten-Konformanzlauf (jolux/akn/bridge) rot;
       5. Provenance-Konsistenz (ausgehandelte Version ≠ Badge ≠ ADR-Ziel) bricht.
@@ -120,7 +120,7 @@ schriftlich fixiert, Konsumenten-Inventar (2 Clients) + Abbruchkriterien verifiz
       - **Konsument 1 (ansV):** `cargo test -p ansv-fedlex` grün — **22 Unit + 2 E2E-Mock**
         (`e2e_belegkette.rs`: `frage_ohne_eli_endet_verifiziert`, `geratener_eli_bleibt_unverifiziert`);
         `live.rs` (2 Tests) zuvor erwartungsgemäss `ignored` (braucht `MCP_FEDLEX_JWT` + Netz).
-      - **Konsument 2 (syllogismus-fedlex):** `cargo test` grün — **10 Unit**, 0 ignored.
+      - **Konsument 2 (mcp-fedlex-skills):** `cargo test` grün — **10 Unit**, 0 ignored.
       - **Reader-Baseline gegengeprüft:** `cargo test -p mcp-reader` → **135 Unit + 6 Baseline
         (`protocol_baseline.rs`) + 1 Lexicon** grün; `quota_integration` `ignored` (braucht Docker).
       **Referenz-Live-Lauf archiviert (2026-06-20):** Mit frisch gemintetem Navigator-JWT
@@ -227,7 +227,7 @@ parallel gepflegt. Ein kurzer Übergang, in dem der alte Pfad noch antwortet, is
       > `ProtocolHeaderOutcome::{Absent, Supported, Unsupported}`. Bewusst getrennt von
       > [`negotiate`] (Handshake-Ebene), damit der unterschiedliche Fallback explizit im Typ steht:
       > **fehlender/leerer Header → `Absent` (kein 400)** — schützt die header-losen Alt-Clients
-      > (ansV, syllogismus-fedlex); gesetzte unbekannte Version → `Unsupported` (= späterer HTTP
+      > (ansV, mcp-fedlex-skills); gesetzte unbekannte Version → `Unsupported` (= späterer HTTP
       > **400**, erst mit Streamable HTTP live). 5 Unit-Tests fixieren das Verhalten;
       > `cargo test -p mcp-reader` → **141 unit + 6 baseline + 1 lexicon** grün. Die Verdrahtung in
       > den Request-Pfad folgt erst mit dem Streamable-HTTP-Endpoint (3.2 Rest) + 3.4.
@@ -243,7 +243,7 @@ parallel gepflegt. Ein kurzer Übergang, in dem der alte Pfad noch antwortet, is
       > Body für Notifications 5.1/B-4; **400** unbekannte Protokollversion; **403** ungültiger
       > `Origin`; **401**). Umgestellt auf `axum::response::Response` via `.into_response()` auf
       > **beiden** Pfaden (Parse-Fehler + Normalfall) — **verhaltensneutral**: Alt-Clients (ansV,
-      > syllogismus-fedlex) sehen bit-identisch weiter 200+JSON. Abgesichert durch neuen Test
+      > mcp-fedlex-skills) sehen bit-identisch weiter 200+JSON. Abgesichert durch neuen Test
       > `rpc_handler_keeps_200_json_for_all_paths` (HTTP-200 + `content-type: application/json` +
       > `jsonrpc`-Marker für Parse- und Auth-Fehlerpfad). **Baseline 1.2 unverändert grün**;
       > Gesamtlauf `cargo test -p mcp-reader` → **136 unit + 6 baseline + 1 lexicon** grün.
@@ -295,7 +295,7 @@ abgleichen, **ohne** fail-closed aufzuweichen.
 
       **Kernbefund / Designspannung (für 4.2 + Phase 3 bindend):** Der heutige **200+Body-`-32001`**-Pfad
       ist **kein** Bug, sondern genau das, was die **zwei header-losen Alt-Clients** (ansV,
-      syllogismus-fedlex; rufen `/rpc` ohne `initialize`) brauchen. Ein **401 + `WWW-Authenticate`**
+      mcp-fedlex-skills; rufen `/rpc` ohne `initialize`) brauchen. Ein **401 + `WWW-Authenticate`**
       ist die **Streamable-HTTP**-Konvention und gehört deshalb an den **neuen** Transport (Phase 3),
       während Legacy-`/rpc` übergangsweise bei 200+Body bleibt. Damit ist **keine** Pflicht-Lücke
       offen, die einen harten Schnitt erzwingt: Auth-Konformität für `2025-11-25` ist **additiv**
@@ -337,7 +337,7 @@ abgleichen, **ohne** fail-closed aufzuweichen.
       > `JsonRpcRequest::is_notification()`; das **Antwortverhalten bleibt strikt verhaltensneutral**:
       > der neue `response_id()`-Helfer bildet beide Null-Fälle weiterhin auf `Value::Null` ab, und
       > alle bestehenden Call-Sites (`initialize`/`tools/list`/`tools/call`/Fehlerpfade) nutzen ihn,
-      > sodass Alt-Clients (ansV, syllogismus-fedlex) bit-identisch dieselbe Antwort sehen. Drei
+      > sodass Alt-Clients (ansV, mcp-fedlex-skills) bit-identisch dieselbe Antwort sehen. Drei
       > Unit-Tests fixieren die Drei-Wege-Unterscheidung über die Wire-Grenze
       > (`notification_is_classified_and_maps_to_null_response_id`,
       > `explicit_null_id_is_a_request_not_a_notification`,
@@ -377,7 +377,7 @@ lexicon** grün.
 **Ziel:** Erst jetzt wird die ausgehandelte **Default**-Version auf die Ziel-Revision gehoben.
 
 - [x] **6.1 ansV zuerst vorbereiten — erledigt (2026-06-20).** Geprüft: Beide Alt-Clients (ansV
-      `McpClient`, syllogismus-fedlex `McpFedlexClient`) rufen `POST /rpc` **ohne `initialize`** und
+      `McpClient`, mcp-fedlex-skills `McpFedlexClient`) rufen `POST /rpc` **ohne `initialize`** und
       lesen `protocolVersion` nicht aus → der Default-Flip ist für sie **nicht breaking**. Es war also
       keine ansV-Vorabanpassung nötig; Reihenfolge (7.4) bleibt dennoch dokumentiert für den späteren
       Transport-Schnitt (Phase 9).
@@ -410,11 +410,11 @@ automatisiert (6.4); Image-Pin aus 1.5 erledigt.
 
 ---
 
-## Phase 7 — Konsumenten nachziehen (ansV + syllogismus-fedlex)
+## Phase 7 — Konsumenten nachziehen (ansV + mcp-fedlex-skills)
 
 **Ziel:** ansV nutzt den neuen Stand sauber; belegbare Kette bleibt intakt.
 
-> **Hinweis (§0.4):** syllogismus-fedlex (`McpFedlexClient`) ist der **zweite** Alt-Client und
+> **Hinweis (§0.4):** mcp-fedlex-skills (`McpFedlexClient`) ist der **zweite** Alt-Client und
 > muss bei einem Handshake-/Transport-Zwang **analog** nachgezogen werden (eigener `initialize`-/
 > Streamable-HTTP-Pfad in `mcp_client.rs`), bevor Phase 9 den Alt-Pfad ausmustert.
 
@@ -431,7 +431,7 @@ automatisiert (6.4); Image-Pin aus 1.5 erledigt.
       **Client:** `tool_def_from_mcp` (`ansv-fedlex/src/llm.rs`) liest nun **`inputSchema` bevorzugt,
       `schema` als Fallback** (forward- & backward-kompatibel); zwei Unit-Tests sichern beide Pfade.
       Der E2E-Mock (`e2e_belegkette.rs`) spiegelt die echte Doppel-Form. Damit ist der Alt-Feldname
-      `schema` erst in **Phase 9** gefahrlos entfernbar. (syllogismus-fedlex unkritisch: ruft nie
+      `schema` erst in **Phase 9** gefahrlos entfernbar. (mcp-fedlex-skills unkritisch: ruft nie
       `tools/list`.)
 
 - [ ] **7.3 Staging-Lauf.** Voller Gutachten-Lauf (`examples/gutachten.rs` / Analyse-SSE) gegen

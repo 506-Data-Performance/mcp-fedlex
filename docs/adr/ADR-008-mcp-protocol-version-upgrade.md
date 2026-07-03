@@ -4,8 +4,8 @@
 - **Datum:** 2026-06-20 (§A aktualisiert 2026-06-20)
 - **Kontext-Artefakt:** `crates/mcp-reader/src/transport.rs` (Handshake), `likec4/`
 - **Betrifft:** `mcp-fedlex` (Reader), alle MCP-Clients (Agenten, Claude Desktop, ansV,
-  syllogismus-fedlex) — die beiden Rust-Konsumenten ansV (`ansv-fedlex::McpClient`) und
-  syllogismus-fedlex (`McpFedlexClient`) rufen heute beide `/rpc` ohne `initialize`
+  mcp-fedlex-skills) — die beiden Rust-Konsumenten ansV (`ansv-fedlex::McpClient`) und
+  mcp-fedlex-skills (`McpFedlexClient`) rufen heute beide `/rpc` ohne `initialize`
   (Konsumenten-Inventar: Runbook 55, Phase 0.4)
 - **Ziel-Revision:** **`2025-11-25`** (höchste stabile MCP-Spec-Revision; `2025-06-18` ist als Ziel ausgeschlossen)
 - **Folge-Release:** Ziel `v0.2.0` (siehe `CHANGELOG.md`)
@@ -165,7 +165,7 @@ nicht.
 
    **Zielzustand ist der saubere `2025-11-25`-Transport** — nicht ein Dauer-
    Doppelbetrieb. Während der Migration kann `/rpc` als Übergangs-Schritt
-   stehenbleiben, doch die Konsumenten (ansV, syllogismus-fedlex) werden auf den
+   stehenbleiben, doch die Konsumenten (ansV, mcp-fedlex-skills) werden auf den
    neuen Endpoint nachgezogen (Runbook 55_MIGRATION §0.4); Rückwärtskompatibilität
    ist **kein Ziel**. — *grösster Brocken.*
 
@@ -219,7 +219,7 @@ Reihenfolge bewusst: Handshake → Transport → Auth → optionale Features.
       > ungültiges Credential **HTTP 200 + `-32001` im Body** (kein **401**, kein
       > `WWW-Authenticate`), und es gibt **kein** `.well-known/oauth-protected-resource`
       > (RFC 9728). **Designbefund:** Der 200+Body-Pfad ist genau das, was die zwei
-      > header-losen Alt-Clients (ansV, syllogismus-fedlex) brauchen → **401 +
+      > header-losen Alt-Clients (ansV, mcp-fedlex-skills) brauchen → **401 +
       > `WWW-Authenticate`** gehören an den **neuen** Streamable-HTTP-Pfad (B-2/Phase 3),
       > **nicht** an Legacy-`/rpc`. **Bewusst ausgeschlossen:** OIDC-/AS-Discovery,
       > Scope-Consent (kein OAuth-Scope-Modell — RBAC läuft über die Rolle),
@@ -263,7 +263,7 @@ Reihenfolge bewusst: Handshake → Transport → Auth → optionale Features.
       >   (inkl. `description`) der LLM-Function-Definition durch. Ein **Ersetzen** `schema`→`inputSchema`
       >   ohne Übergang ergäbe bei ansV `parameters = null` → das Modell verlöre alle Argument-Schemata
       >   und Tool-Beschreibungen. Der Doppel-Output ist damit **zwingend** (nicht optional);
-      >   syllogismus-fedlex ist unkritisch (ruft nur `tools/call`, nie `tools/list`). Die saubere
+      >   mcp-fedlex-skills ist unkritisch (ruft nur `tools/call`, nie `tools/list`). Die saubere
       >   Endstufe verlangt zusätzlich ein ansV-Update, das **beide** Felder (`inputSchema` bevorzugt,
       >   `schema` als Fallback) liest — **vor** der Phase-9-Bereinigung.
       >
@@ -302,7 +302,7 @@ Reihenfolge bewusst: Handshake → Transport → Auth → optionale Features.
 grösste Brocken und potenziell breaking für bestehende Clients. **Zielzustand ist
 allein der saubere `2025-11-25`-Transport** — kein Dauer-Doppelbetrieb; `/rpc` darf
 während der Migration übergangsweise bestehen bleiben, doch die Konsumenten (ansV,
-syllogismus-fedlex) werden auf den neuen Pfad nachgezogen, statt den Server an deren
+mcp-fedlex-skills) werden auf den neuen Pfad nachgezogen, statt den Server an deren
 Alt-Verhalten zu binden. Auth-Mapping kann zusätzlichen Aufwand bringen, darf aber
 das fail-closed-Prinzip (ADR-002) nicht aufweichen.
 

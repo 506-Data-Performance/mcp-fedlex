@@ -9,11 +9,11 @@
 
 Die Writer-Seite (CQRS-Schreibseite) verarbeitet New-Release-Events des ETL und
 materialisiert den Korpus in drei Senken. Redis (DOM/Referenzen), Oxigraph (JOLux-Graph)
-und `semantic-fedlex` (Vektor-Index). Zwei strukturelle Schwächen der v6.0-Modellierung
+und `mcp-fedlex-semantic` (Vektor-Index). Zwei strukturelle Schwächen der v6.0-Modellierung
 gefährden die Verlässlichkeit dieser Pipeline.
 
 1. **Stiller Index-Drift.** Der Aufruf `indexWriter -> semanticService` (`index()`) war
-   synchron und ohne Fallback modelliert. Fällt `semantic-fedlex` während der Ingestion
+   synchron und ohne Fallback modelliert. Fällt `mcp-fedlex-semantic` während der Ingestion
    aus (GPU-Dienst, eigene Verfügbarkeit), wird der Korpus geschrieben, aber **ohne
    Vektoren**. Das Ergebnis ist ein Korpus, dessen semantische Suche unvollständig ist,
    ohne dass jemand es bemerkt. Für ein Recherchewerkzeug ist eine stille Lücke schlimmer
@@ -26,7 +26,7 @@ gefährden die Verlässlichkeit dieser Pipeline.
 ## Entscheidung 1 — Embedding-Outbox statt synchronem index()-Aufruf
 
 Der Embedding-Auftrag wird **transaktional in einer Outbox** (`embeddingOutbox`)
-persistiert, nicht synchron an `semantic-fedlex` gepusht. Ein separater Zusteller liest
+persistiert, nicht synchron an `mcp-fedlex-semantic` gepusht. Ein separater Zusteller liest
 die Outbox und ruft `index()` mit Retry/Backoff auf.
 
 ### Akzeptanzkriterien (Code)

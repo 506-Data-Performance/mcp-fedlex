@@ -160,7 +160,7 @@ bewusster, begründeter Ausschluss.
 | AKN-CMP-02 | Excluded  | `get_component_document` — dito |
 | AKN-SPC-01 | Excluded  | `extract_tables` — Nutzwert-Lücke (G-2), ausgeschlossen |
 | AKN-SPC-02 | Excluded  | `detect_foreign_content` — Nutzwert-Lücke (G-2), ausgeschlossen |
-| AKN-CHK-01 | Excluded  | `hollow_document` — **RAG-Ingest** für `semantic-fedlex`, bewusst kein Agenten-Tool (Lexikon §CHK) |
+| AKN-CHK-01 | Excluded  | `hollow_document` — **RAG-Ingest** für `mcp-fedlex-semantic`, bewusst kein Agenten-Tool (Lexikon §CHK) |
 | AKN-CHK-02 | Excluded  | `chunk_document` — dito |
 
 **Zusammenfassung:** 21 `Projected`, 26 `Excluded`, Summe 47. (JOLux 13/14, AKN 8/12.)
@@ -244,7 +244,7 @@ use Projection::*;
 const MATRIX: &[(&str, Projection)] = &[
     ("JLX-RES-01", Projected("resolve_sr_number")),
     // … alle 47 Einträge exakt aus §2 …
-    ("AKN-CHK-02", Excluded("RAG-Ingest für semantic-fedlex")),
+    ("AKN-CHK-02", Excluded("RAG-Ingest für mcp-fedlex-semantic")),
 ];
 
 // Registrierte Tools OHNE Lexikon-Primitiv (Composite). Müssen bewusst
@@ -346,5 +346,5 @@ Meldung rot werden („Lexikon-ID X hat keinen Matrix-Eintrag"). Danach wieder e
 Die `Excluded`-Begründungen in §2 sind bewusst knapp gehalten. Falls gewünscht, beim Umsetzen
 die G-2-Einträge (`MOD-02`, `REF-02`, `CMP-*`, `SPC-*`) einheitlich als
 `Excluded("G-2: Nutzwert-Lücke, zurückgestellt")` und die `CHK-*` als
-`Excluded("RAG: semantic-fedlex-Ingest")` formulieren — das hält die Tabelle grep-bar nach
+`Excluded("RAG: mcp-fedlex-semantic-Ingest")` formulieren — das hält die Tabelle grep-bar nach
 Ausschluss-Kategorie.

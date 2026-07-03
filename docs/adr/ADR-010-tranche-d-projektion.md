@@ -37,7 +37,7 @@ Funktionsraum** an der Agenten-Oberfläche anbieten.
 `resolve_eid`, `get_section_path`, `get_component_document` — sie arbeiten
 unter der Haube der projizierten Tools; eine Doppel-Oberfläche wäre
 Redundanz ohne Agenten-Nutzen) und die 2 RAG-Bausteine (`hollow_document`,
-`chunk_document` — Ingest-Schicht von semantic-fedlex, kein Agenten-Werkzeug).
+`chunk_document` — Ingest-Schicht von mcp-fedlex-semantic, kein Agenten-Werkzeug).
 
 ## Konsequenzen
 

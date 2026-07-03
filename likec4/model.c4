@@ -1,7 +1,7 @@
 // ============================================================
 // mcp-fedlex - Föderierter "Agentic Legal Navigator" (MCP-Server)
 // model.c4 (v7.0) - Direct-Fetch Reader
-// v7.0: Writer-Pfad entfernt (Indexierung lebt in semantic-fedlex),
+// v7.0: Writer-Pfad entfernt (Indexierung lebt in mcp-fedlex-semantic),
 //       fedlex-bridge als produktiver Direct-Fetch-Pfad (live verifiziert),
 //       Redis/Oxigraph-Korpus-Stores als #deferred Skalierungs-Stufe,
 //       Transport SSE -> Streamable HTTP (MCP-Spec-Wechsel)
@@ -36,7 +36,7 @@ model {
     technology 'Redis'
   }
 
-  semanticService = external 'semantic-fedlex (Embedding & Vector Search)' {
+  semanticService = external 'mcp-fedlex-semantic (Embedding & Vector Search)' {
     #optional
     description 'Eigenständiger GPU-Dienst (eigenes Repo). Das hybride RAG-Add-on: kapselt Embedding-Modell, Vektor-DB UND die eigene Corpus-Ingestion (Fedlex -> Chunking -> index()). Der Reader ruft nur search(query, as_of, top_k) - Top-K-Treffer sind Wegweiser (Discovery), nie Quelle; die Rechtsaussage kommt immer über den strukturellen Pfad (Bridge -> AKN). Fällt er aus, navigiert mcp strukturell weiter.'
     technology 'gRPC / HTTP'
@@ -147,7 +147,7 @@ model {
       }
       provenanceEnvelope = component 'Provenance-Envelope (Antwort-Gate)' {
         #agentic
-        description 'Erzwingt strukturell, dass JEDE Tool-Antwort ihre Herkunft trägt: Provenance { eli, valid_as_of, transaction_time }. Während der Temporal Resolver die Anfrage stempelt, garantiert dieses Gate die Rückführbarkeit der Antwort - die Grundlage für den Audit-Trail von syllogismus-fedlex (jede Aussage rückführbar auf Norm-ELI). Pflichtfeld, kein optionales Metadatum. Siehe ADR-004.'
+        description 'Erzwingt strukturell, dass JEDE Tool-Antwort ihre Herkunft trägt: Provenance { eli, valid_as_of, transaction_time }. Während der Temporal Resolver die Anfrage stempelt, garantiert dieses Gate die Rückführbarkeit der Antwort - die Grundlage für den Audit-Trail von mcp-fedlex-skills (jede Aussage rückführbar auf Norm-ELI). Pflichtfeld, kein optionales Metadatum. Siehe ADR-004.'
       }
     }
 
@@ -197,10 +197,10 @@ model {
       technology 'Rust / fedlex-bridge / fedlex-jolux / fedlex-akn'
     }
 
-    // ----- Semantik-Client (dünn, zu semantic-fedlex) -----
+    // ----- Semantik-Client (dünn, zu mcp-fedlex-semantic) -----
     semanticClient = container 'Semantic-Search-Client' {
       #optional
-      description 'Dünner Client (KEINE GPU) zu semantic-fedlex. Reicht die Agenten-Query inkl. Stichtag an search() weiter und mappt die Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf rein strukturelle Navigation.'
+      description 'Dünner Client (KEINE GPU) zu mcp-fedlex-semantic. Reicht die Agenten-Query inkl. Stichtag an search() weiter und mappt die Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf rein strukturelle Navigation.'
       technology 'Rust / gRPC-Client'
     }
 

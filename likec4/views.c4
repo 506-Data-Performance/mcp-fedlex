@@ -9,7 +9,7 @@ views {
   // ========================================================
   view vision {
     title '1 - Vision: Föderierter Agentic Legal Navigator (Context)'
-    description 'Das große Bild. Autonome LLM-Agenten sprechen via Streamable HTTP mit dem zustandslosen MCP-Reader (Auth gegen IdP/Vault). Der Reader holt Bundesrecht direkt und stichtagsgenau von Fedlex (Direct Fetch via fedlex-bridge) - ohne eigene Korpus-Kopie. Die hybride RAG-Variante (Embedding/Vektor) lebt als optionales Add-on in semantic-fedlex. Föderale & internationale Rechtsgebiete werden dynamisch über das LOD-Netzwerk integriert, alles lückenlos in die Observability exportiert.'
+    description 'Das große Bild. Autonome LLM-Agenten sprechen via Streamable HTTP mit dem zustandslosen MCP-Reader (Auth gegen IdP/Vault). Der Reader holt Bundesrecht direkt und stichtagsgenau von Fedlex (Direct Fetch via fedlex-bridge) - ohne eigene Korpus-Kopie. Die hybride RAG-Variante (Embedding/Vektor) lebt als optionales Add-on in mcp-fedlex-semantic. Föderale & internationale Rechtsgebiete werden dynamisch über das LOD-Netzwerk integriert, alles lückenlos in die Observability exportiert.'
 
     include
       llmAgent,
@@ -68,7 +68,7 @@ views {
   // ========================================================
   view plan of mcp {
     title '3 - Plan: MCP-Reader Architektur (Container)'
-    description 'Zustandsloser Reader: Streamable-HTTP-Transport (Rate Limiter & Auth), MCP-Registry (Tools/Resources/Prompts/Workspace + Temporal Resolver, Tool-Dispatcher & globale Graceful-Failure-Middleware), XML/AKN-Engine (Execution Sandbox), Fedlex-Bridge (Direct Fetch, jolux+akn-Primitive), lokaler L1-DOM-Cache (moka), Federated URI-Resolver (Circuit Breaker), dünner Semantic-Search-Client (zu semantic-fedlex) und Observability-Layer. Session-State & Quotas liegen in Redis; der Korpus bleibt bei Fedlex.'
+    description 'Zustandsloser Reader: Streamable-HTTP-Transport (Rate Limiter & Auth), MCP-Registry (Tools/Resources/Prompts/Workspace + Temporal Resolver, Tool-Dispatcher & globale Graceful-Failure-Middleware), XML/AKN-Engine (Execution Sandbox), Fedlex-Bridge (Direct Fetch, jolux+akn-Primitive), lokaler L1-DOM-Cache (moka), Federated URI-Resolver (Circuit Breaker), dünner Semantic-Search-Client (zu mcp-fedlex-semantic) und Observability-Layer. Session-State & Quotas liegen in Redis; der Korpus bleibt bei Fedlex.'
 
     include
       *,
@@ -158,10 +158,10 @@ views {
       sharedCache
   }
 
-  // 5e - Semantic-Search-Client (zu semantic-fedlex)
+  // 5e - Semantic-Search-Client (zu mcp-fedlex-semantic)
   view component_semantic_client of mcp.semanticClient {
-    title '5e - Semantic-Search-Client (zu semantic-fedlex)'
-    description 'Dünner Client ohne GPU: reicht die Agenten-Query inkl. Stichtag an semantic-fedlex.search() weiter und mappt Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf strukturelle Navigation.'
+    title '5e - Semantic-Search-Client (zu mcp-fedlex-semantic)'
+    description 'Dünner Client ohne GPU: reicht die Agenten-Query inkl. Stichtag an mcp-fedlex-semantic.search() weiter und mappt Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf strukturelle Navigation.'
     include
       *,
       mcp.mcpRegistry,

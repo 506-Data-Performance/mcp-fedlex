@@ -32,7 +32,7 @@ pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-11-25"];
 
 /// Die ausgehandelte Default-Version, wenn der Client keine nennt. Auf die
 /// Ziel-Revision `2025-11-25` gehoben (Runbook Phase 6). Die handshake-losen
-/// Clients (ansV, syllogismus-fedlex) lesen `protocolVersion` nicht aus und
+/// Clients (ansV, mcp-fedlex-skills) lesen `protocolVersion` nicht aus und
 /// bleiben unberührt; explizit nachfragende Clients erhalten weiterhin die von
 /// ihnen genannte unterstützte Version. Per [`default_protocol_version`] aus der
 /// Umgebung überschreibbar (Runbook 2.3), z. B. Rollback auf `2024-11-05`.
@@ -100,7 +100,7 @@ pub fn negotiate(requested: Option<&str>, default: &'static str) -> &'static str
 /// - `initialize` ohne `protocolVersion` → [`negotiate`] gibt die **Default**
 ///   (heute `2024-11-05`).
 /// - HTTP-Header **fehlt** → Spec-SHOULD: Rückwärtskompatibilität, **kein
-///   Fehler**. Für die beiden Alt-Clients (ansV, syllogismus-fedlex), die den
+///   Fehler**. Für die beiden Alt-Clients (ansV, mcp-fedlex-skills), die den
 ///   Header nie senden, ist [`ProtocolHeaderOutcome::Absent`] der Normalfall.
 ///
 /// **Diese Funktion ist reine Klassifikation und (noch) NICHT in den
@@ -148,7 +148,7 @@ pub fn classify_protocol_header(header: Option<&str>) -> ProtocolHeaderOutcome {
 /// gegen eine Allowlist prüfen muss.
 ///
 /// **Abgrenzung zu den Alt-Clients:** Server-zu-Server-Konsumenten (ansV,
-/// syllogismus-fedlex) sind **keine** Browser und senden **keinen** `Origin`.
+/// mcp-fedlex-skills) sind **keine** Browser und senden **keinen** `Origin`.
 /// Für sie ist [`OriginOutcome::Absent`] der Normalfall → erlaubt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OriginOutcome {
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn header_absent_is_backward_compatible_not_an_error() {
         // Kern der Reconciliation 3.1↔6: fehlender Header darf die heutigen
-        // Alt-Clients (ansV, syllogismus-fedlex) NICHT brechen.
+        // Alt-Clients (ansV, mcp-fedlex-skills) NICHT brechen.
         assert_eq!(
             classify_protocol_header(None),
             ProtocolHeaderOutcome::Absent
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn origin_absent_is_allowed_for_non_browser_clients() {
-        // Server-zu-Server-Clients (ansV, syllogismus-fedlex) senden keinen
+        // Server-zu-Server-Clients (ansV, mcp-fedlex-skills) senden keinen
         // `Origin` → kein 403, der Normalfall bleibt unberührt.
         assert_eq!(classify_origin(None, &[]), OriginOutcome::Absent);
         assert_eq!(classify_origin(Some(""), &[]), OriginOutcome::Absent);

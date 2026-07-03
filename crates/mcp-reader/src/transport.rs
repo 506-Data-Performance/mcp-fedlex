@@ -566,7 +566,7 @@ fn now_ms() -> u64 {
 ///
 /// **Rückgabetyp [`Response`] statt `Json<…>` (Migrations-Runbook Phase 3.2).**
 /// Heute antwortet jeder Pfad weiterhin **HTTP 200 + JSON-Body** — bit-identisch
-/// zum bisherigen Verhalten und von Alt-Clients (ansV, syllogismus-fedlex) nicht
+/// zum bisherigen Verhalten und von Alt-Clients (ansV, mcp-fedlex-skills) nicht
 /// unterscheidbar. Der allgemeinere Typ ist die strukturelle Vorbedingung, um in
 /// den späteren Phasen ohne erneuten Signatur-Umbau die von der Ziel-Revision
 /// geforderten Status-Codes auszudrücken: **202/204** ohne Body (Notifications,
@@ -1516,7 +1516,7 @@ mod tests {
     /// `content-type: application/json` — auch der Auth-Fehlerfall, der nur als
     /// JSON-RPC-Error im Body erscheint, nie als HTTP-Status. Dieser Test fällt
     /// rot, sobald jemand versehentlich einen abweichenden Status einführt, und
-    /// schützt damit die Alt-Clients (ansV, syllogismus-fedlex), die ausschliesslich
+    /// schützt damit die Alt-Clients (ansV, mcp-fedlex-skills), die ausschliesslich
     /// den Body auswerten.
     #[tokio::test]
     async fn rpc_handler_keeps_200_json_for_all_paths() {

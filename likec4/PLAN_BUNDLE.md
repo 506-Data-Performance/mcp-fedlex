@@ -120,7 +120,7 @@ specification {
 // ============================================================
 // mcp-fedlex - Föderierter "Agentic Legal Navigator" (MCP-Server)
 // model.c4 (v7.0) - Direct-Fetch Reader
-// v7.0: Writer-Pfad entfernt (Indexierung lebt in semantic-fedlex),
+// v7.0: Writer-Pfad entfernt (Indexierung lebt in mcp-fedlex-semantic),
 //       fedlex-bridge als produktiver Direct-Fetch-Pfad (live verifiziert),
 //       Redis/Oxigraph-Korpus-Stores als #deferred Skalierungs-Stufe,
 //       Transport SSE -> Streamable HTTP (MCP-Spec-Wechsel)
@@ -155,7 +155,7 @@ model {
     technology 'Redis'
   }
 
-  semanticService = external 'semantic-fedlex (Embedding & Vector Search)' {
+  semanticService = external 'mcp-fedlex-semantic (Embedding & Vector Search)' {
     #optional
     description 'Eigenständiger GPU-Dienst (eigenes Repo). Das hybride RAG-Add-on: kapselt Embedding-Modell, Vektor-DB UND die eigene Corpus-Ingestion (Fedlex -> Chunking -> index()). Der Reader ruft nur search(query, as_of, top_k) - Top-K-Treffer sind Wegweiser (Discovery), nie Quelle; die Rechtsaussage kommt immer über den strukturellen Pfad (Bridge -> AKN). Fällt er aus, navigiert mcp strukturell weiter.'
     technology 'gRPC / HTTP'
@@ -266,7 +266,7 @@ model {
       }
       provenanceEnvelope = component 'Provenance-Envelope (Antwort-Gate)' {
         #agentic
-        description 'Erzwingt strukturell, dass JEDE Tool-Antwort ihre Herkunft trägt: Provenance { eli, valid_as_of, transaction_time }. Während der Temporal Resolver die Anfrage stempelt, garantiert dieses Gate die Rückführbarkeit der Antwort - die Grundlage für den Audit-Trail von syllogismus-fedlex (jede Aussage rückführbar auf Norm-ELI). Pflichtfeld, kein optionales Metadatum. Siehe ADR-004.'
+        description 'Erzwingt strukturell, dass JEDE Tool-Antwort ihre Herkunft trägt: Provenance { eli, valid_as_of, transaction_time }. Während der Temporal Resolver die Anfrage stempelt, garantiert dieses Gate die Rückführbarkeit der Antwort - die Grundlage für den Audit-Trail von mcp-fedlex-skills (jede Aussage rückführbar auf Norm-ELI). Pflichtfeld, kein optionales Metadatum. Siehe ADR-004.'
       }
     }
 
@@ -316,10 +316,10 @@ model {
       technology 'Rust / fedlex-bridge / fedlex-jolux / fedlex-akn'
     }
 
-    // ----- Semantik-Client (dünn, zu semantic-fedlex) -----
+    // ----- Semantik-Client (dünn, zu mcp-fedlex-semantic) -----
     semanticClient = container 'Semantic-Search-Client' {
       #optional
-      description 'Dünner Client (KEINE GPU) zu semantic-fedlex. Reicht die Agenten-Query inkl. Stichtag an search() weiter und mappt die Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf rein strukturelle Navigation.'
+      description 'Dünner Client (KEINE GPU) zu mcp-fedlex-semantic. Reicht die Agenten-Query inkl. Stichtag an search() weiter und mappt die Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf rein strukturelle Navigation.'
       technology 'Rust / gRPC-Client'
     }
 
@@ -401,7 +401,7 @@ views {
   // ========================================================
   view vision {
     title '1 - Vision: Föderierter Agentic Legal Navigator (Context)'
-    description 'Das große Bild. Autonome LLM-Agenten sprechen via Streamable HTTP mit dem zustandslosen MCP-Reader (Auth gegen IdP/Vault). Der Reader holt Bundesrecht direkt und stichtagsgenau von Fedlex (Direct Fetch via fedlex-bridge) - ohne eigene Korpus-Kopie. Die hybride RAG-Variante (Embedding/Vektor) lebt als optionales Add-on in semantic-fedlex. Föderale & internationale Rechtsgebiete werden dynamisch über das LOD-Netzwerk integriert, alles lückenlos in die Observability exportiert.'
+    description 'Das große Bild. Autonome LLM-Agenten sprechen via Streamable HTTP mit dem zustandslosen MCP-Reader (Auth gegen IdP/Vault). Der Reader holt Bundesrecht direkt und stichtagsgenau von Fedlex (Direct Fetch via fedlex-bridge) - ohne eigene Korpus-Kopie. Die hybride RAG-Variante (Embedding/Vektor) lebt als optionales Add-on in mcp-fedlex-semantic. Föderale & internationale Rechtsgebiete werden dynamisch über das LOD-Netzwerk integriert, alles lückenlos in die Observability exportiert.'
 
     include
       llmAgent,
@@ -460,7 +460,7 @@ views {
   // ========================================================
   view plan of mcp {
     title '3 - Plan: MCP-Reader Architektur (Container)'
-    description 'Zustandsloser Reader: Streamable-HTTP-Transport (Rate Limiter & Auth), MCP-Registry (Tools/Resources/Prompts/Workspace + Temporal Resolver, Tool-Dispatcher & globale Graceful-Failure-Middleware), XML/AKN-Engine (Execution Sandbox), Fedlex-Bridge (Direct Fetch, jolux+akn-Primitive), lokaler L1-DOM-Cache (moka), Federated URI-Resolver (Circuit Breaker), dünner Semantic-Search-Client (zu semantic-fedlex) und Observability-Layer. Session-State & Quotas liegen in Redis; der Korpus bleibt bei Fedlex.'
+    description 'Zustandsloser Reader: Streamable-HTTP-Transport (Rate Limiter & Auth), MCP-Registry (Tools/Resources/Prompts/Workspace + Temporal Resolver, Tool-Dispatcher & globale Graceful-Failure-Middleware), XML/AKN-Engine (Execution Sandbox), Fedlex-Bridge (Direct Fetch, jolux+akn-Primitive), lokaler L1-DOM-Cache (moka), Federated URI-Resolver (Circuit Breaker), dünner Semantic-Search-Client (zu mcp-fedlex-semantic) und Observability-Layer. Session-State & Quotas liegen in Redis; der Korpus bleibt bei Fedlex.'
 
     include
       *,
@@ -550,10 +550,10 @@ views {
       sharedCache
   }
 
-  // 5e - Semantic-Search-Client (zu semantic-fedlex)
+  // 5e - Semantic-Search-Client (zu mcp-fedlex-semantic)
   view component_semantic_client of mcp.semanticClient {
-    title '5e - Semantic-Search-Client (zu semantic-fedlex)'
-    description 'Dünner Client ohne GPU: reicht die Agenten-Query inkl. Stichtag an semantic-fedlex.search() weiter und mappt Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf strukturelle Navigation.'
+    title '5e - Semantic-Search-Client (zu mcp-fedlex-semantic)'
+    description 'Dünner Client ohne GPU: reicht die Agenten-Query inkl. Stichtag an mcp-fedlex-semantic.search() weiter und mappt Top-K-Treffer zurück. Fällt der Dienst aus, degradiert mcp graceful auf strukturelle Navigation.'
     include
       *,
       mcp.mcpRegistry,

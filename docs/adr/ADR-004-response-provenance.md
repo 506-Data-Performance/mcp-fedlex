@@ -3,7 +3,7 @@
 - **Status:** Accepted (Plan / v6.1)
 - **Datum:** 2026-06-01
 - **Kontext-Artefakt:** `likec4/` (v6.1) — Komponenten `mcpRegistry.provenanceEnvelope`, `mcpRegistry.temporalResolver`
-- **Betrifft:** `mcp-fedlex` (Reader / Navigator), nachgelagert `syllogismus-fedlex`
+- **Betrifft:** `mcp-fedlex` (Reader / Navigator), nachgelagert `mcp-fedlex-skills`
 
 ## Kontext
 
@@ -15,7 +15,7 @@ Es fehlte jedoch die symmetrische Garantie auf der **Antwort**-Seite. Eine Tool-
 ihre Herkunft nur als Konvention, nicht strukturell. Damit fehlt die maschinell prüfbare
 Rückführbarkeit jeder gelieferten Aussage auf `(eli, valid_as_of, transaction_time)`.
 
-Das ist die wichtigste der hier behandelten Schwächen, denn `syllogismus-fedlex` baut darauf
+Das ist die wichtigste der hier behandelten Schwächen, denn `mcp-fedlex-skills` baut darauf
 einen **Audit-Trail** des Justizsyllogismus auf. Jede Prämisse (Obersatz/Norm) muss auf eine
 exakte, zitierfähige Norm-Version zurückführbar sein. Ohne strukturelle Provenance in der
 Antwort ist die Schlussfolgerung nicht auditierbar und juristisch wertlos.
@@ -48,7 +48,7 @@ Response<T> {
       Beleg).
 - [ ] **Listen/Aggregate.** Liefert ein Tool mehrere Quellen, trägt jedes Element seine
       eigene Provenance (keine Sammel-Provenance, die Herkunft verwischt).
-- [ ] **Verträge.** Das Schema ist Teil der Interface-Contracts mit `syllogismus-fedlex`
+- [ ] **Verträge.** Das Schema ist Teil der Interface-Contracts mit `mcp-fedlex-skills`
       (siehe `fedlex-ecosystem/docs/20_INTERFACE_CONTRACTS.md`).
 - [ ] **Tests.** Negativtest, der belegt, dass eine Tool-Implementierung ohne gesetzte
       Provenance nicht kompiliert bzw. zur Laufzeit hart fehlschlägt.
@@ -65,7 +65,7 @@ Response<T> {
 
 - **Provenance als optionales Metadatenfeld (v6.0).** Verworfen. Optional bedeutet in der
   Praxis „fehlt irgendwann", und genau dann bricht der Audit-Trail.
-- **Provenance nur im Trace/Log.** Verworfen. Der Konsument (`syllogismus-fedlex`) braucht
+- **Provenance nur im Trace/Log.** Verworfen. Der Konsument (`mcp-fedlex-skills`) braucht
   die Herkunft **in den Daten**, nicht in einem separaten Observability-Kanal.
 
 ## Konsequenzen

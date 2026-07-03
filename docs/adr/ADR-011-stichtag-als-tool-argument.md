@@ -9,7 +9,7 @@
 
 Der Stichtag `as_of` wurde bisher ausschliesslich auf `params`-Ebene gelesen —
 als Geschwister von `name`/`arguments`. Das war für die eigenen Clients (ansV,
-syllogismus-fedlex) gedacht, die den Stichtag applikationsseitig pinnen. Die
+mcp-fedlex-skills) gedacht, die den Stichtag applikationsseitig pinnen. Die
 Dogfooding-Session (68 §A-2) zeigte die Konsequenz für alle anderen: Ein Modell
 hinter einem Standard-MCP-Host füllt **nur** `arguments` — es konnte den
 Stichtag **nie** setzen. Schlimmer: Ein `as_of` in den `arguments` wurde

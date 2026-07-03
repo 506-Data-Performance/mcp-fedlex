@@ -3,7 +3,7 @@
 - **Status:** Accepted — interne Redis-Kante implementiert (v7.0)
 - **Datum:** 2026-06-01
 - **Kontext-Artefakt:** `likec4/` (v6.1) — interne Kanten Reader/Writer → `sharedCache`, `sharedGraphStore`, `semanticService`
-- **Betrifft:** `mcp-fedlex` (Reader & Writer), Schnittstelle zu `semantic-fedlex`
+- **Betrifft:** `mcp-fedlex` (Reader & Writer), Schnittstelle zu `mcp-fedlex-semantic`
 
 ## Kontext
 
@@ -12,7 +12,7 @@ ADR-001 sichert die Vertraulichkeit der Daten (PII-Scrubbing, Tenant-Isolation),
 geschützt.
 
 Ungeschützt bleibt das **interne** Netz. Die Kanten Reader → Redis, Reader → Oxigraph,
-Reader → semantic-fedlex sowie Writer → Redis und Writer → Oxigraph tragen heute keine
+Reader → mcp-fedlex-semantic sowie Writer → Redis und Writer → Oxigraph tragen heute keine
 sichtbare gegenseitige Authentifizierung. In einem Mandantenkontext unter anwaltlichem
 Berufsgeheimnis (Art. 321 StGB, revDSG) ist ein offenes internes Netz die plausibelste reale
 Angriffsfläche, denn dort fliessen entschlüsselte Korpus- und Scratchpad-Daten zwischen den
@@ -34,7 +34,7 @@ einem anderen allein aufgrund der Netzwerklage.
       verifizierte Zertifikate (anwendungsseitiges mTLS, ADR-005-Alternative). Im
       Direct-Fetch-Stand (v7.0) ist dies die einzige interne Cluster-Kante des Readers;
       Oxigraph (eingebetteter Korpus) und der Writer-Pfad sind mit dem CQRS-Rueckbau
-      entfallen, semantic-fedlex ist im aktuellen Stand nicht verdrahtet.
+      entfallen, mcp-fedlex-semantic ist im aktuellen Stand nicht verdrahtet.
       (`fedlex-store::RedisTlsConfig` + `RedisQuotaBackend::connect_with_tls`,
       `mcp-reader::main::build_quota_backend`; Manifeste `redis.yaml`/`reader.yaml`)
 - [x] **Default-Deny-NetworkPolicy.** Pods akzeptieren nur explizit erlaubte Verbindungen;
@@ -47,7 +47,7 @@ einem anderen allein aufgrund der Netzwerklage.
       Verzicht auf ein Mesh.
 - [x] **Redis-AUTH zusätzlich.** Redis verlangt zusätzlich zur mTLS-Schicht ein Passwort
       (`requirepass`, Defense-in-Depth). Der Klartext-Port ist abgeschaltet (`--port 0`).
-- [n/a] **semantic-fedlex-Grenze.** Im Direct-Fetch-Stand (v7.0) nicht verdrahtet. Greift
+- [n/a] **mcp-fedlex-semantic-Grenze.** Im Direct-Fetch-Stand (v7.0) nicht verdrahtet. Greift
       wieder, sobald der Semantic-Pfad zurueckkehrt.
 - [x] **Tests.** `fedlex-store::redis_tls`-Unittests (Klartext-Schema abgelehnt, leeres
       Material abgelehnt, Schluessel im Debug redigiert) plus der gegatete

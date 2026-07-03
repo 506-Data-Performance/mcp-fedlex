@@ -41,7 +41,7 @@ das Gate **nicht** — sie tragen eine Provenance, aber eine, die sich **als Hin
   „Listen/Aggregate"). Sie sagt: *„zum Stichtag X als Kandidat gefunden"*, nicht *„Norm Y
   besagt Z"*.
 - Diese Provenance ist als `kind: "hint"` (vs. `kind: "norm"`) **maschinell unterscheidbar**.
-  Der Konsument (`syllogismus-fedlex`/`ansV`) darf einen Hinweis **nicht** als Beleg zählen.
+  Der Konsument (`mcp-fedlex-skills`/`ansV`) darf einen Hinweis **nicht** als Beleg zählen.
 - Ein Treffer ohne ELI gibt es nicht (jeder `LawHit`/`SrHit`/`RelatedLaw` trägt ein ELI),
   daher bleibt das ADR-004-Kriterium „kein nacktes `T`, kein fehlendes ELI" gewahrt.
 
@@ -81,7 +81,7 @@ kann das Gewicht senken, ADR-002).
 - [ ] **Quota-Gewicht.** Ein Discovery-Call bucht mehr Tokens als ein `LocalNavigation`-Call;
       Test belegt das gewichtete Abbuchen.
 - [ ] **Konsument-Vertrag.** Das `kind`-Feld ist Teil der Interface-Contracts mit
-      `syllogismus-fedlex` (`fedlex-ecosystem/docs/20_INTERFACE_CONTRACTS.md`); ein Hinweis zählt
+      `mcp-fedlex-skills` (`fedlex-ecosystem/docs/20_INTERFACE_CONTRACTS.md`); ein Hinweis zählt
       dort nicht als Beleg.
 - [ ] **Tests.** Dispatch-Test zeigt Hinweis-Provenance im Wire-Format; Test, dass ein
       Discovery-Treffer-ELI anschliessend von einem norm-tragenden Tool (`get_metadata`/
@@ -113,7 +113,7 @@ kann das Gewicht senken, ADR-002).
 - **Positiv.** Der Einstieg „Frage ohne ELI" wird gutachtenfähig; die Discovery→Beleg-Kette ist
   durchgängig und auditierbar; die Trennung Hinweis/Beleg ist typsicher.
 - **Negativ.** Ein neuer Provenance-Variant berührt `fedlex-core` und alle Serialisierer;
-  Konsumenten (`syllogismus-fedlex`, `ansV`) müssen das `kind`-Feld auswerten. Live-Discovery
+  Konsumenten (`mcp-fedlex-skills`, `ansV`) müssen das `kind`-Feld auswerten. Live-Discovery
   erhöht die Last gegen Fedlex (durch Quota-Gewicht gedämpft).
 - **Modell.** Neuer `ToolPool::Discovery` und der Provenance-Variant `Hint` in der LikeC4-Spec;
   drei neue Tool-Knoten unter dem Reader.

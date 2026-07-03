@@ -104,7 +104,7 @@ Föderierte Auflösung über ELI/ECLI.
 
 ## M7 — Semantic-Client (`mcp-reader`)
 
-Dünner, optionaler Client zu semantic-fedlex.
+Dünner, optionaler Client zu mcp-fedlex-semantic.
 
 - [x] `semanticClient.search(query, as_of, top_k)`, Top-K-Mapping mit Provenance je Treffer (ADR-004).
 - [x] Graceful Degradation bei Ausfall (rein strukturelle Navigation).
@@ -119,7 +119,7 @@ Der Schreibpfad mit der Resilienz aus ADR-003.
 - [x] Oxigraph-Anbindung (SPARQL), append-only bi-temporale Schreibpfade (aus M2 verschoben). Der `OxigraphCorpusSink` verdrahtet den Schreibpfad an den eingebetteten Korpus der Leseseite. Die Fassungs-Kennung wird zum Stichtag, der Schreibmoment zur Transaktionszeit. Die Senke ist fehlbar, ein Store-Ausfall laeuft ueber Retry und DLQ statt still verloren zu gehen.
 - [x] `embeddingOutbox` transaktional, idempotenter Zusteller mit Backoff, Vollständigkeits-Marker.
 - [x] Cache-Invalidierungs-Events nach jedem Write.
-- [x] **Test-Nachweis.** Test, dass ein Poison-Release in der DLQ landet und valide Releases nicht blockiert; Test, dass ein simulierter semantic-fedlex-Ausfall die Outbox füllt und nach Recovery nachzieht (kein stiller Drift).
+- [x] **Test-Nachweis.** Test, dass ein Poison-Release in der DLQ landet und valide Releases nicht blockiert; Test, dass ein simulierter mcp-fedlex-semantic-Ausfall die Outbox füllt und nach Recovery nachzieht (kein stiller Drift).
 
 ## M9 — Observability & PII-Scrubber (`fedlex-telemetry`)
 
@@ -140,7 +140,7 @@ Lückenloses Tracing mit Compliance-Gate.
 - [x] Cache-Warmup gegen Stampede (Backlog B-1). Single-Flight ueber moka `try_get_with`, fehlbarer Lader ohne Cache-Vergiftung, proaktives Batch-Vorwaermen mit Bericht. 5 Tests gruen.
 - [x] AKN/Jolux-Schema-Versions-Handling (Backlog B-2). `SCHEMA_VERSION`-Konstante im Korpus, in jeden Backup-Kopf geschrieben; `restore_from_str` prueft sie und bricht bei Abweichung hart mit `GraphError::SchemaMismatch` ab (statt still inkompatible Daten zu laden), Migrationsnotiz am Restore-Pfad. cargo-test-beweisbar: `restore_rejects_foreign_schema_version`.
 
-- [ ] **Test-Nachweis.** Negativtest, dass ein nicht-authentifizierter In-Cluster-Client Redis/Oxigraph/semantic-fedlex nicht erreicht; Restore-Test, der den Graph aus Backup wiederherstellt. Ehrliche Einordnung. Nur der Health-Endpunkt-Teil hat einen cargo-test-Beweis, der Rest ist Infra.
+- [ ] **Test-Nachweis.** Negativtest, dass ein nicht-authentifizierter In-Cluster-Client Redis/Oxigraph/mcp-fedlex-semantic nicht erreicht; Restore-Test, der den Graph aus Backup wiederherstellt. Ehrliche Einordnung. Nur der Health-Endpunkt-Teil hat einen cargo-test-Beweis, der Rest ist Infra.
 
 ## M11 — Discovery-Tools & Hinweis-Provenance (`mcp-reader`, `fedlex-core`)
 

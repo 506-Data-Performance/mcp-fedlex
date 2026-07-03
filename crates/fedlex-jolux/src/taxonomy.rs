@@ -2,7 +2,7 @@
 //! (Lexikon JLX-TAX-01/02, Rulebook J20.3).
 //!
 //! Die deterministische Brücke für Cross-Law-Navigation — komplementär zu
-//! semantic-fedlex (Embedding-basiert, probabilistisch). Deckt 85.4 % der
+//! mcp-fedlex-semantic (Embedding-basiert, probabilistisch). Deckt 85.4 % der
 //! CAs ab; der Rest ist nur über Vektor-Suche erreichbar.
 
 use crate::client::{Language, PREFIXES, SparqlClient, val};

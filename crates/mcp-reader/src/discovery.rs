@@ -11,7 +11,7 @@
 //! Ein Suchtreffer ist eine **Hypothese**, kein Beleg. Deshalb trägt jede
 //! Discovery-Antwort eine **Hinweis-Provenance** (`ProvenanceKind::Hint`), die
 //! sich strukturell von einer Norm-Provenance unterscheidet. Der Konsument
-//! (`syllogismus-fedlex`/`ansV`) kann einen Hinweis nicht versehentlich als
+//! (`mcp-fedlex-skills`/`ansV`) kann einen Hinweis nicht versehentlich als
 //! Beleg verbuchen, weil der Typ es ausweist.
 //!
 //! Die Hülle der `Response` trägt eine Hinweis-Provenance auf die **Anfrage

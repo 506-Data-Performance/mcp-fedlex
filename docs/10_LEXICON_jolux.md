@@ -5,7 +5,7 @@
 > **Wer es konsumiert.**
 > - `mcp-fedlex` implementiert Primitive als MCP-Tools (Projektion, nicht Quelle).
 > - `skills-fedlex` komponiert Primitive zu juristischen Playbooks.
-> - `syllogismus-fedlex` referenziert Primitive in auditierbaren Schluss-Schritten.
+> - `mcp-fedlex-skills` referenziert Primitive in auditierbaren Schluss-Schritten.
 > - Orchestratoren (z.B. OpenClaw) planen über Lexikon-IDs statt über Tool-Namen.
 >
 > **Quellen (Ground Truth).**
@@ -182,7 +182,7 @@ Bi-Temporalität ist das Kernversprechen. JOLux modelliert sie über Consolidati
 - **JOLux:** `inForceStatus`, `dateEntryInForce`, `dateNoLongerInForce`, `dateEndApplicability`
 - **Empirie:** 47.6 % in Kraft, 52 % ausser Kraft, 15.1 % ohne Status (J3.3). `dateNoLongerInForce` deckt 96 % der Abgelaufenen, `dateEndApplicability` nur Sonderfälle (4 %).
 - **Falltraps:** Status-Feld allein genügt nicht (10'479 CAs ohne Status, aber mit `dateEntryInForce`). Doppel-FILTER nach J3.2 verwenden. In 4 % liegt `dateNoLongerInForce` **vor** `dateEndApplicability`.
-- **Komposition:** ← JLX-RES-03 | Pflicht-Baustein jeder Geltungs-Aussage in syllogismus-fedlex
+- **Komposition:** ← JLX-RES-03 | Pflicht-Baustein jeder Geltungs-Aussage in mcp-fedlex-skills
 - **Status:** implementiert + konformanz-getestet (`check_in_force`, `jlx_tmp_03`)
 
 ---
@@ -272,7 +272,7 @@ Die formale Änderungshistorie. `OC-Erlass → Impact → CC-Subdivision` (J6.1)
 - **Frage:** "Welche Gesetze gehören zum selben Rechtsgebiet?"
 - **Signatur:** `(taxonomy_uri | eli, depth?) → [{ eli, title, sr }]`
 - **JOLux:** `classifiedByTaxonomyEntry` invers + `skos:broader`/`narrower`
-- **Empirie:** **Die** deterministische Brücke für Cross-Law-Navigation (J20.3) — komplementär zu semantic-fedlex (Embedding-basiert, probabilistisch).
+- **Empirie:** **Die** deterministische Brücke für Cross-Law-Navigation (J20.3) — komplementär zu mcp-fedlex-semantic (Embedding-basiert, probabilistisch).
 - **Falltraps:** Taxonomie deckt 85.4 % — Rest nur über Vektor-Suche erreichbar.
 - **Komposition:** ← JLX-TAX-01 | alternative zu `semantic_search` bei Makro-Scope
 - **Status:** implementiert + konformanz-getestet (`find_related_by_topic`, `jlx_tax_02`)

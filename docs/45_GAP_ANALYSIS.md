@@ -99,7 +99,7 @@ heutiger Stand:
   (`mcp-reader/src/tools.rs`), in der Matrix als `Projected` verbucht (AKN-CMP-01, AKN-SPC-01,
   AKN-SPC-02) und durch Offline-Tests abgedeckt. `get_component_document` (AKN-CMP-02) bleibt
   bewusst `Excluded` — interner Helper, von `list_components` abgedeckt.
-- `hollow_document`/`chunk_document` sind eher **RAG-Bausteine** für `semantic-fedlex` als
+- `hollow_document`/`chunk_document` sind eher **RAG-Bausteine** für `mcp-fedlex-semantic` als
   direkte Agenten-Tools — **bewusster Ausschluss** (`CHK-*` als `Excluded` in der Matrix).
 
 

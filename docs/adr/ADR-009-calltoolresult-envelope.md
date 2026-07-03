@@ -3,7 +3,7 @@
 - **Status:** Accepted — umgesetzt 2026-07-02 (67 §P-1)
 - **Datum:** 2026-07-02
 - **Kontext-Artefakt:** `crates/mcp-reader/src/registry.rs` (Verpackung), `transport.rs` (Audit/Metrik/Validierungsfehler)
-- **Betrifft:** `mcp-fedlex` (Reader) und beide Rust-Konsumenten — ansV (`ansv-fedlex::McpClient`), syllogismus-fedlex (`McpFedlexClient`) — sowie alle generischen MCP-Clients (Claude Desktop, Inspector, SDKs)
+- **Betrifft:** `mcp-fedlex` (Reader) und beide Rust-Konsumenten — ansV (`ansv-fedlex::McpClient`), mcp-fedlex-skills (`McpFedlexClient`) — sowie alle generischen MCP-Clients (Claude Desktop, Inspector, SDKs)
 - **Folge-Release:** Ziel `v0.3.0` (siehe `CHANGELOG.md`)
 
 ## Kontext
@@ -42,7 +42,7 @@ Konformitätslücke (Audit 2026-07-02, [67 §P-1](../67_HARDENING_AND_SOTA_ROADM
    `kind: "norm"|"hint"`, `eli`, `valid_as_of`, `transaction_time`); `data`
    bleibt bewusst tool-spezifisch untypisiert.
 3. **Konsumenten-Nachzug deploy-reihenfolge-sicher:** ansV und
-   syllogismus-fedlex lesen `structuredContent` **bevorzugt** und fallen auf
+   mcp-fedlex-skills lesen `structuredContent` **bevorzugt** und fallen auf
    das rohe `result` zurück (gleiches Muster wie `inputSchema`/`schema` in
    ADR-008 §B-5). Damit sind Konsument-zuerst- und Server-zuerst-Deploys beide
    verträglich; der Fallback fällt mit dem Legacy-`schema`-Schlüssel in

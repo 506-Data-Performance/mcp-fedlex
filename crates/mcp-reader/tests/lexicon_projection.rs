@@ -172,8 +172,8 @@ const MATRIX: &[(&str, Projection)] = &[
     ),
     ("AKN-SPC-01", Projected("extract_tables")),
     ("AKN-SPC-02", Projected("detect_foreign_content")),
-    ("AKN-CHK-01", Excluded("RAG: semantic-fedlex-Ingest")),
-    ("AKN-CHK-02", Excluded("RAG: semantic-fedlex-Ingest")),
+    ("AKN-CHK-01", Excluded("RAG: mcp-fedlex-semantic-Ingest")),
+    ("AKN-CHK-02", Excluded("RAG: mcp-fedlex-semantic-Ingest")),
 ];
 
 /// Registrierte Server-Tools **ohne** 1:1-Lexikon-Primitiv (Composite-Tools, die

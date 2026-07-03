@@ -37,7 +37,7 @@ Datei referenziert (grep über `main/transport/registry/tools/discovery/metadata
 | Single-Flight-`L1Cache` (`get_with`) | `mcp-reader/src/xml_engine.rs:88` | moka-Cache ohne Stampede-Schutz (`fetcher.rs:68-72`) |
 | Timeout-`Sandbox` (`spawn_blocking` + Deadline) | `mcp-reader/src/sandbox.rs:83` | XML-Parse läuft **inline** auf dem Runtime-Thread (`fetcher.rs:71`) |
 | `WarmupCache` | `mcp-reader/src/warmup.rs:61` | `health.mark_started()` sofort (`main.rs:92`) |
-| `SemanticClient` | `mcp-reader/src/semantic_client.rs` | — (semantic-fedlex noch nicht angebunden) |
+| `SemanticClient` | `mcp-reader/src/semantic_client.rs` | — (mcp-fedlex-semantic noch nicht angebunden) |
 | `ToolPool::LodFederation`, `ToolPool::Workspace` | `tool.rs:23,44` | deklariert, unbestückt (Fussnote in [90](90_AUTH_AND_ROLES.md) §3) |
 
 Dazu **Duplikate**: `compare_versions` rechnet den Fassungs-Diff von Hand nach
@@ -154,7 +154,7 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
   nach **P-5** umziehen oder mitlöschen; `diff_to_markdown` s. W-2.
 - `lod_gateway.rs`/`ToolPool::LodFederation` → behalten **nur mit** datiertem Reaktivierungs-
   Vermerk (LOD-Milestone), sonst löschen.
-- `semantic_client.rs`/`ToolPool::Workspace` → dito (semantic-fedlex-Anbindung).
+- `semantic_client.rs`/`ToolPool::Workspace` → dito (mcp-fedlex-semantic-Anbindung).
 - `warmup.rs` → entweder echten Warmup in `main.rs:90-92` schalten (BV/OR/ZGB vorladen)
   oder löschen.
 - **Abnahme:** grep „exportiert-aber-unreferenziert" ist leer bzw. jeder Rest trägt einen
@@ -178,7 +178,7 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
 - **Wirkung:** größte verbleibende Wire-Abweichung; blockiert generische Client-Nutzung.
 - **Abnahme:** `CallToolResult` mit `content[]` + `structuredContent` (der `{data,provenance}`-
   Block ist bereits strukturiert) + `outputSchema` je Tool; Konsumenten (ansV,
-  syllogismus-fedlex) im selben Schritt nachziehen (Muster ADR-008: keine Rückwärts-
+  mcp-fedlex-skills) im selben Schritt nachziehen (Muster ADR-008: keine Rückwärts-
   Kompatibilität als Ziel); Baseline-Tests auf die neue Hülle umgestellt; MCP-Inspector
   zeigt strukturierte Antworten.
 
@@ -226,7 +226,7 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
 - **Wo A2A im Ökosystem stattdessen hingehört:** eine Ebene höher. Ein
   «Fedlex-Recherche-Agent» (mehrstufige Recherche mit Norm-Belegen als
   Artefakt — naheliegend in ansV bzw. als eigenes Binary neben
-  semantic-fedlex) wäre ein echter A2A-Kandidat: langlaufend, delegierbar,
+  mcp-fedlex-semantic) wäre ein echter A2A-Kandidat: langlaufend, delegierbar,
   mit Agent Card «kann Schweizer Bundesrecht zeitpunktgenau belegen». Dieser
   Agent konsumiert mcp-fedlex dann **via MCP** — genau die Arbeitsteilung,
   die beide Protokolle vorsehen.

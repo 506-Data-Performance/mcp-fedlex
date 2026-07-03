@@ -187,7 +187,7 @@ ausgeschlossen). Erst auf dieser Basis steigen Code/String. Zielrelease **`v0.2.
 > Ende **sauber gegen die MCP-Revision `2025-11-25` funktionieren** — gemessen am
 > Konformanztest, nicht an der Kompatibilität mit dem heutigen Verhalten. Rückwärts-/
 > Abwärtskompatibilität ist **ausdrücklich kein Ziel**: bestehende Konsumenten (ansV,
-> syllogismus-fedlex) werden, wo nötig, im selben Schritt auf den `2025-11-25`-Pfad
+> mcp-fedlex-skills) werden, wo nötig, im selben Schritt auf den `2025-11-25`-Pfad
 > nachgezogen, statt den Server an deren Alt-Verhalten zu binden.
 
 

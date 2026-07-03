@@ -103,7 +103,7 @@ im Wire-Format; mindestens ein Live-/Mock-Test, der das Primitiv über das Tool 
 **Inhalt.** Ein Test/Doku-Artefakt (Vollständigkeits-Matrix), das jedes im Lexikon
 dokumentierte, agenten-taugliche Primitiv genau einem Zustand zuordnet: **projiziert** (Tool X)
 oder **begründet ausgeschlossen** (z.B. `hollow_document`/`chunk_document` als RAG-Bausteine für
-semantic-fedlex, G-2). Bricht, wenn ein neues Primitiv ohne Zuordnung dazukommt.
+mcp-fedlex-semantic, G-2). Bricht, wenn ein neues Primitiv ohne Zuordnung dazukommt.
 
 **Erledigt (2026-06-16).** Verankert in `crates/mcp-reader/tests/lexicon_projection.rs` (offline,
 läuft in jeder `cargo test`-Runde, **kein** `#[ignore]`). Die `MATRIX` ordnet alle 47 Lexikon-IDs

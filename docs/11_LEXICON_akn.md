@@ -5,8 +5,8 @@
 > **Wer es konsumiert.**
 > - `mcp-fedlex` implementiert Primitive als MCP-Tools (Projektion, nicht Quelle).
 > - `skills-fedlex` komponiert Primitive zu juristischen Playbooks.
-> - `semantic-fedlex` nutzt die Destillations-Primitive (CHK) als Ingest-Spezifikation.
-> - `syllogismus-fedlex` referenziert Primitive in auditierbaren Schluss-Schritten.
+> - `mcp-fedlex-semantic` nutzt die Destillations-Primitive (CHK) als Ingest-Spezifikation.
+> - `mcp-fedlex-skills` referenziert Primitive in auditierbaren Schluss-Schritten.
 > - Orchestratoren (z.B. OpenClaw) planen über Lexikon-IDs statt über Tool-Namen.
 >
 > **Quellen (Ground Truth).**
@@ -136,7 +136,7 @@ Die Vollstruktur, die JOLux nicht hat (dort max. 8.5 % Abdeckung, J4.1). Hier is
 - **AKN:** Vorfahren-Kette über die eId-Pfad-Hierarchie und die DOM-Eltern.
 - **Empirie:** Pflicht-Metadatum jedes Chunks (`section_path`, X14.3).
 - **Falltraps:** eId-Pfade (`chap_1/sec_2`) und DOM-Verschachtelung stimmen fast immer überein, aber der DOM ist die Wahrheit — eIds älterer Dateien sind teils flach vergeben.
-- **Komposition:** ← AKN-STR-02 | → AKN-CHK-02 (Kontext-Metadaten), Zitier-Anzeigen in syllogismus-fedlex
+- **Komposition:** ← AKN-STR-02 | → AKN-CHK-02 (Kontext-Metadaten), Zitier-Anzeigen in mcp-fedlex-skills
 - **Status:** implementiert + konformanz-getestet (`get_section_path`, `akn_str_structure_resolve_and_path_eng`)
 
 ---
@@ -151,7 +151,7 @@ Der eigentliche Gesetzestext. Existiert ausschliesslich hier — JOLux hat 0 % T
 - **AKN:** `<article>` → `<num>`, `<heading>`, `<paragraph>` → `<content>` → `<p>`, Listen via `<blockList>/<listIntroduction>/<item>`.
 - **Empirie:** 70'009 Artikel. Median ~550 Zeichen (~140 Tokens), 62.6 % der CC-Artikel zwischen 200 und 1'000 Zeichen (X10.2, GAP I4).
 - **Falltraps:** `<authorialNote>` **vor** der Textextraktion aus dem Fluss separieren — sie ist Änderungshistorie, kein Normtext (X6.4). `<num>` enthält oft `<placeholder>` (96.5 % aller placeholder, X16.6). Hollowing beachten, wenn das Element Kinder hat (AKN-CHK-01).
-- **Komposition:** ← AKN-STR-02 | ⊕ JLX-IMP-02 (Historie zum selben Artikel), → syllogismus-fedlex (Normtext-Zitat)
+- **Komposition:** ← AKN-STR-02 | ⊕ JLX-IMP-02 (Historie zum selben Artikel), → mcp-fedlex-skills (Normtext-Zitat)
 - **Status:** implementiert + konformanz-getestet (`get_article_text`, `akn_txt_article_text_and_notes_eng`)
 
 ### AKN-TXT-02 · get_element_text
@@ -176,7 +176,7 @@ Der eigentliche Gesetzestext. Existiert ausschliesslich hier — JOLux hat 0 % T
 - **Frage:** "Wo im Gesetz kommt 'Eigenverbrauch' vor?"
 - **Signatur:** `(doc, query, max_hits?) → [{ eid, snippet, section_path }]`
 - **AKN:** Volltextsuche über die gehollowten Blatt-Texte, Treffer auf eId-Ebene.
-- **Empirie:** Mikro-Scope-Suche **innerhalb** eines Erlasses — komplementär zu semantic-fedlex (Cross-Law, Embedding-basiert).
+- **Empirie:** Mikro-Scope-Suche **innerhalb** eines Erlasses — komplementär zu mcp-fedlex-semantic (Cross-Law, Embedding-basiert).
 - **Falltraps:** Ohne Text-Normalisierung (Soft-Hyphen, NBSP) entgehen Treffer (X18.3). Suche über Eltern-Elemente ohne Hollowing liefert Mehrfach-Treffer desselben Texts.
 - **Komposition:** ← AKN-DOC-01, AKN-CHK-01 | → AKN-TXT-01 (Treffer-Artikel lesen)
 - **Status:** implementiert + konformanz-getestet (`search_text`, `akn_txt_search_eng`)
@@ -281,7 +281,7 @@ Inhalte, die kein Fliesstext sind und Sonderbehandlung brauchen.
 
 ## Domäne 8 — Destillation & Chunking (CHK)
 
-Die Transformations-Schicht. Macht AKN-Inhalte redundanzfrei und RAG-tauglich — die Ingest-Spezifikation für semantic-fedlex.
+Die Transformations-Schicht. Macht AKN-Inhalte redundanzfrei und RAG-tauglich — die Ingest-Spezifikation für mcp-fedlex-semantic.
 
 ### AKN-CHK-01 · hollow_document
 - **Frage:** "Gib mir jedes Element genau einmal mit seinem eigenen Text" (Redundanz-Eliminierung)
@@ -298,7 +298,7 @@ Die Transformations-Schicht. Macht AKN-Inhalte redundanzfrei und RAG-tauglich �
 - **AKN:** musterabhängige Strategie (X14.2). FLAT/STRUCTURED → Artikel, LEVEL_BASED → Level-Einheit, NO_BODY → Component-Doc, AMENDMENT → quotedStructure, OTHER → `<p>`-Gruppen.
 - **Empirie:** Chunk-Median ~550 Zeichen (~140 Tokens, X10.2). 8 Pflicht-Metadaten pro Chunk (X14.3).
 - **Falltraps:** **Chunking ist ein 5-Strategien-Problem** — 66 % der Dateien brauchen kein Artikel-Chunking (X14.4). Artikel >2'000 Zeichen am `<paragraph>` splitten. Tabellen als Einheit, Signature-Blöcke als eigene Einheit oder an den letzten Artikel (X18.7).
-- **Komposition:** ← AKN-DOC-03 (Strategie), AKN-CHK-01 (Hollowing) | → semantic-fedlex Ingest, `mcp-ingest`
+- **Komposition:** ← AKN-DOC-03 (Strategie), AKN-CHK-01 (Hollowing) | → mcp-fedlex-semantic Ingest, `mcp-ingest`
 - **Status:** implementiert + konformanz-getestet (`chunk_document`, `akn_chk_02_chunks_eng`)
 
 ---
@@ -357,7 +357,7 @@ Beschaffung         JLX-TMP-02 (Stichtag) → JLX-RES-04 (URL) → DOC-01 → DO
                                           │
 Struktur            DOC-03 → STR-01 (Outline) → STR-02 (eId) → STR-03 (Pfad)
                                           │
-Normtext            STR-02 → TXT-01/02 (Artikel/Element) → syllogismus-fedlex
+Normtext            STR-02 → TXT-01/02 (Artikel/Element) → mcp-fedlex-skills
                     DOC-01 → TXT-03 (ganzes Dokument als Markdown)
                                           │
 Änderungshistorie   TXT-01 → MOD-02 (Fussnoten) ⊕ JLX-IMP-02 (Graph) → Merge
@@ -367,7 +367,7 @@ Zitationsnetz       REF-01 ⊕ JLX-CIT-01 (Merge!) → REF-02 (href-lose) → JL
                                           │
 Anhänge             CMP-01 ⊕ JLX-SUB-02 (Abgleich) → CMP-02 → rekursiv STR/TXT
                                           │
-RAG-Ingest          DOC-03 → CHK-01 (Hollowing) → CHK-02 (Chunks) → semantic-fedlex
+RAG-Ingest          DOC-03 → CHK-01 (Hollowing) → CHK-02 (Chunks) → mcp-fedlex-semantic
 ```
 
 Drei Kompositions-Invarianten für Skill-Autoren:

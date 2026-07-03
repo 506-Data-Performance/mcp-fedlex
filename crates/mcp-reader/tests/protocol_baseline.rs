@@ -184,7 +184,7 @@ async fn initialize_handshake_negotiates_target_revision() {
     // Kontrollierte Pull-Through (Runbook Phase 6.3, ADR-008): Der handshake-lose
     // `initialize` (ohne `protocolVersion`) handelt jetzt die Ziel-Revision
     // `2025-11-25` aus — der vollständige Lifecycle (initialize/initialized/ping)
-    // deckt sie. Die handshake-losen Alt-Clients (ansV, syllogismus-fedlex) lesen
+    // deckt sie. Die handshake-losen Alt-Clients (ansV, mcp-fedlex-skills) lesen
     // `protocolVersion` nicht aus und bleiben unberührt; ein explizit `2024-11-05`
     // anfragender Client erhält weiterhin `2024-11-05` (separat getestet im
     // Transport-Modul: `initialize_echoes_supported_client_version`).

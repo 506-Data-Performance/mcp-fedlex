@@ -1,7 +1,7 @@
 //! Herkunfts-Hülle (Provenance) nach ADR-004.
 //!
 //! Jede Tool-Antwort muss strukturell ihre Herkunft tragen, damit der Reasoner
-//! (syllogismus-fedlex) jede Aussage auf eine exakte Norm-Version zurückführen
+//! (mcp-fedlex-skills) jede Aussage auf eine exakte Norm-Version zurückführen
 //! kann. `Provenance` bündelt die drei Pflichtfelder ELI, Gültigkeitszeit und
 //! Systemzeit. Die Felder sind nicht-optional, ein fehlendes ELI ist ein Fehler
 //! und kein Sonderfall.
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Art der Herkunft (ADR-004 / ADR-006).
 ///
 /// Die Unterscheidung ist **strukturell, nicht konventionell**: Ein Konsument
-/// (`syllogismus-fedlex`/`ansV`) kann einen Hinweis nicht versehentlich als
+/// (`mcp-fedlex-skills`/`ansV`) kann einen Hinweis nicht versehentlich als
 /// Norm-Beleg verbuchen, weil der Typ es ausweist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
