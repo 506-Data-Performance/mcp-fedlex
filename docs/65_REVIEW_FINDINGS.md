@@ -98,6 +98,35 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
 - **Behandlung:** [67 §T-3](67_HARDENING_AND_SOTA_ROADMAP.md) (Sammel-Nachzug) und
   [67 §T-2](67_HARDENING_AND_SOTA_ROADMAP.md) (Lexikon-Wache code-getrieben + Namensabgleich).
 
+### RF-5 — Redis-Passwort im Klartext im Startup-Log (Credential-Leak in Logs)
+- **Status:** 🔴 offen
+- **Entdeckt:** 2026-07-03, beim Prod-Smoke der Agent-UX-Welle (`kubectl logs` der frisch
+  ausgerollten Reader-Pods, Digest `1703721…`).
+- **Beleg:** [`crates/mcp-reader/src/main.rs:250`](../crates/mcp-reader/src/main.rs#L250) und
+  [`:255`](../crates/mcp-reader/src/main.rs#L255) loggen das strukturierte Feld `redis_url` auf
+  INFO. `REDIS_URL` kommt in Prod aus dem SealedSecret `mcp-reader-redis-auth` in der Form
+  `rediss://default:<passwort>@mcp-reader-redis:6379` — das **Passwort steht damit im Klartext**
+  in stdout. Verifiziert an der laufenden Instanz: `mcp_reader: Quota-Redis über mTLS verbunden
+  (ADR-005) redis_url="rediss://default:<redigiert>@mcp-reader-redis:6379"`.
+- **Wirkung:** Jedes Log-Ziel, das stdout einsammelt, erhält das Redis-Passwort — im Cluster
+  **Promtail → Loki** (`kube-prometheus-stack`, k3-infra), potenziell also ein zentraler,
+  breiter zugänglicher Log-Store und in Backups. Bricht die Grundregel der eigenen
+  Compliance-Schicht (`fedlex-telemetry`: „nichts Sensibles verlässt den Prozess unmaskiert");
+  der vorhandene allowlist-Scrubber greift für Span-Attribute, **nicht** für dieses direkte
+  `tracing::info!`. Entschärfend, aber nicht heilend: Default-Deny-NetworkPolicy, das Passwort
+  rotiert mit dem SealedSecret, und es ist ein Infra- (kein Mandanten-)Credential — daher
+  Härtung/Defense-in-Depth, kein akuter Incident.
+- **Behandlung:** URL vor dem Logging redigieren — nur `scheme://host:port` ausgeben, `userinfo`
+  (alles zwischen `//` und `@`) durch `***` ersetzen; am saubersten als kleiner
+  `RedactedRedisUrl`-Newtype mit eigener `Display`-Impl, sodass die rohe URL nie versehentlich
+  in ein `tracing`-Feld geraten kann (Typsystem statt Disziplin — analog `Sensitive<T>`).
+  Beide Logzeilen (mTLS + Klartext-Fallback) umstellen; Regressionstest, der die gerenderte
+  Logzeile auf Abwesenheit des `:<pw>@`-Musters prüft. Klein und risikoarm, zieht aber einen
+  Rebuild + Redeploy nach sich → als Härtungs-Punkt einplanbar
+  ([67](67_HARDENING_AND_SOTA_ROADMAP.md)). **Sicherheitsfund** — gemäss
+  [CLAUDE.md](../CLAUDE.md) nicht als öffentliches Issue führen (GitHub ist öffentlicher
+  Mirror); Behandlung hier + ggf. `SECURITY.md`, nicht im Bugtracker.
+
 ---
 
 ## Triage-Regel (ein Satz)

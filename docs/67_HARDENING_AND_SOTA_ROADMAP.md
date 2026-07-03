@@ -118,6 +118,20 @@ Breaker. Genau das ist heute das größte Stabilitätsrisiko.
   Timeout als *degraded*-Signal statt Unready; Verhalten in [80_DEPLOY](80_DEPLOY.md)
   dokumentiert.
 
+### H-9 — Redis-Passwort aus dem Startup-Log redigieren 🔴 (Sicherheitsfund [RF-5](65_REVIEW_FINDINGS.md))
+- **Beleg:** `main.rs:250`/`:255` loggen `redis_url` auf INFO; die Prod-URL
+  (`rediss://default:<pw>@…`, SealedSecret `mcp-reader-redis-auth`) trägt das Passwort im
+  Klartext — verifiziert am laufenden Pod beim Prod-Smoke 2026-07-03. Der vorhandene
+  allowlist-Scrubber (`fedlex-telemetry`) greift für Span-Attribute, nicht für dieses direkte
+  `tracing::info!`.
+- **Wirkung:** stdout → Promtail/Loki (und Backups) bekommt das Infra-Credential; bricht die
+  eigene «nichts Sensibles unmaskiert»-Regel. Entschärft durch Default-Deny-NetworkPolicy +
+  Secret-Rotation, daher Defense-in-Depth statt Incident.
+- **Abnahme:** `RedactedRedisUrl`-Newtype mit `Display`, das `userinfo` durch `***` ersetzt
+  (Typsystem statt Disziplin, analog `Sensitive<T>`); beide Logzeilen umgestellt;
+  Regressionstest prüft die gerenderte Zeile auf Abwesenheit des `:<pw>@`-Musters. Zieht
+  Rebuild + Redeploy nach sich.
+
 ---
 
 ## Block O — Observability (heute: 14 × `println!`)
