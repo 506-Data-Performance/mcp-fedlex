@@ -65,7 +65,11 @@ pub async fn resolve_consolidation_at(
         language: lang.tag().to_string(),
     };
 
-    let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now());
+    // Die Provenance weist die tatsächlich aufgelöste Fassung aus — der
+    // Stichtag allein suggeriert sonst eine Konsolidierung, die es (etwa bei
+    // künftigen Stichtagen) nicht gibt.
+    let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now())
+        .with_date_applicability(cons.date_applicability.clone());
     Ok(Response::new(cons, prov))
 }
 
@@ -109,16 +113,29 @@ pub async fn list_versions(
 }
 
 /// Ergebnis der Geltungsprüfung eines Erlasses.
+///
+/// **Zwei Zeitbezüge, bewusst getrennt benannt:** `in_force` beantwortet die
+/// Frage zum **Stichtag** der Anfrage; `current_status_*` spiegelt den
+/// **heutigen** Vokabular-Status des Erlasses bei Fedlex (der Graph kennt
+/// keinen historisierten Status). Vor der Umbenennung standen beide Signale
+/// unversöhnt nebeneinander — `in_force: false` (Stichtag vor Inkrafttreten)
+/// neben `status_label: "In Kraft"` führte Konsumenten in die Irre.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InForce {
     /// Geltung zum Stichtag (Doppel-Logik, siehe [`check_in_force`]).
     pub in_force: bool,
-    /// `jolux:inForceStatus` (opake Vokabular-URI), sofern vorhanden.
-    pub status_uri: Option<String>,
-    /// Deutsches Label des Status (z.B. «In Kraft», «Nicht mehr in Kraft»),
-    /// direkt in der Query gejoint (68 §C-1).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status_label: Option<String>,
+    /// `jolux:inForceStatus` (opake Vokabular-URI), sofern vorhanden —
+    /// **heutiger** Status, nicht stichtagsbezogen.
+    #[serde(alias = "status_uri")]
+    pub current_status_uri: Option<String>,
+    /// Deutsches Label des **heutigen** Status (z.B. «In Kraft», «Nicht mehr
+    /// in Kraft»), direkt in der Query gejoint (68 §C-1).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "status_label"
+    )]
+    pub current_status_label: Option<String>,
     /// Inkrafttreten.
     pub date_entry_in_force: Option<String>,
     /// Ausserkrafttreten (deckt 96 % der Abgelaufenen, J3.2).
@@ -155,8 +172,8 @@ pub async fn check_in_force(
         .first()
         .ok_or_else(|| JoluxError::NotFound(uri.clone()))?;
 
-    let status_uri = val(b, "status").map(str::to_string);
-    let status_label = val(b, "statusLabel")
+    let current_status_uri = val(b, "status").map(str::to_string);
+    let current_status_label = val(b, "statusLabel")
         .filter(|s| !s.is_empty())
         .map(str::to_string);
     let entry = val(b, "entry").map(str::to_string);
@@ -174,13 +191,15 @@ pub async fn check_in_force(
         started && !ended
     } else {
         // Fallback J3.3: kein Datum -> Status-Vokabular (0 = in Kraft).
-        status_uri.as_deref().is_some_and(|s| s.ends_with("/0"))
+        current_status_uri
+            .as_deref()
+            .is_some_and(|s| s.ends_with("/0"))
     };
 
     let data = InForce {
         in_force,
-        status_uri,
-        status_label,
+        current_status_uri,
+        current_status_label,
         date_entry_in_force: entry,
         date_no_longer_in_force: no_longer,
         date_end_applicability: end_app,
@@ -303,6 +322,9 @@ mod tests {
             .unwrap();
         assert!(resp.data().in_force, "Fallback auf Status-Vokabular (J3.3)");
         // 68 §C-1: Label direkt aus der Query — kein resolve_vocabulary_label nötig.
-        assert_eq!(resp.data().status_label.as_deref(), Some("In Kraft"));
+        assert_eq!(
+            resp.data().current_status_label.as_deref(),
+            Some("In Kraft")
+        );
     }
 }

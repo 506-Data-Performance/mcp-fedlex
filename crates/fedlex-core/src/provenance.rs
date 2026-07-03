@@ -41,6 +41,16 @@ pub struct Provenance {
     /// älteren Payloads wird `norm` angenommen (Abwärtskompatibilität).
     #[serde(default)]
     pub kind: ProvenanceKind,
+    /// Stand-Datum (`jolux:dateApplicability`) der **tatsächlich aufgelösten**
+    /// Fassung, sofern eine Fassungs-Auflösung stattfand. Macht sichtbar,
+    /// welche Konsolidierung die Aussage wirklich trägt — insbesondere wenn
+    /// der Stichtag zwischen zwei Fassungen oder in der Zukunft liegt.
+    /// Künftige Stichtage werden bewusst **nicht** abgelehnt (Fedlex führt
+    /// beschlossene, noch nicht anwendbare Fassungen); ohne dieses Feld würde
+    /// aber `valid_as_of: 2035-…` eine bestätigte Fassung suggerieren, die es
+    /// nicht gibt. Optional und additiv (ältere Payloads/Consumer unberührt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_applicability: Option<String>,
 }
 
 impl Provenance {
@@ -52,7 +62,16 @@ impl Provenance {
             valid_as_of,
             transaction_time,
             kind: ProvenanceKind::Norm,
+            date_applicability: None,
         }
+    }
+
+    /// Trägt das Stand-Datum der tatsächlich aufgelösten Fassung nach
+    /// (Builder — gesetzt, wo eine Fassungs-Auflösung stattfand).
+    #[must_use]
+    pub fn with_date_applicability(mut self, date: impl Into<String>) -> Self {
+        self.date_applicability = Some(date.into());
+        self
     }
 
     /// Erzeugt eine **Hinweis**-Herkunft (Discovery, ADR-006). Gleiche
@@ -64,6 +83,7 @@ impl Provenance {
             valid_as_of,
             transaction_time,
             kind: ProvenanceKind::Hint,
+            date_applicability: None,
         }
     }
 

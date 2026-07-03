@@ -311,7 +311,7 @@ async fn jlx_tmp_03_check_in_force() {
     assert!(resp.data().in_force, "EnG muss am Stichtag in Kraft sein");
     assert!(
         resp.data()
-            .status_uri
+            .current_status_uri
             .as_deref()
             .unwrap_or("")
             .ends_with("/0"),

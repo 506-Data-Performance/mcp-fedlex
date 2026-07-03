@@ -164,7 +164,8 @@ fn output_schema() -> Value {
                     "kind": { "type": "string", "enum": ["norm", "hint"] },
                     "eli": { "type": "string" },
                     "valid_as_of": { "type": "string", "description": "Stichtag (JJJJ-MM-TT)" },
-                    "transaction_time": { "type": "string", "description": "Abrufzeitpunkt" }
+                    "transaction_time": { "type": "string", "description": "Abrufzeitpunkt" },
+                    "date_applicability": { "type": "string", "description": "Stand-Datum der tatsaechlich aufgeloesten Fassung (JJJJ-MM-TT). Weicht valid_as_of davon ab (z.B. kuenftiger Stichtag), traegt die Aussage nur diese Fassung." }
                 }
             }
         }

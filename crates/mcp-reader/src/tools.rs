@@ -9,8 +9,10 @@
 //!
 //! Provenance (ADR-004). Wo das Primitiv selbst ein [`Response`] liefert
 //! (TXT-01/02/03, STR-01), gilt dessen Herkunft, denn sie stammt strukturell
-//! aus dem FRBR-Block des geparsten Dokuments. Wo das Primitiv nackt ist
-//! (TXT-04, DOC-02/03), gilt die Herkunft der JOLux-Auflösung der Bridge.
+//! aus dem FRBR-Block des geparsten Dokuments — das Stand-Datum der von der
+//! Bridge aufgelösten Fassung wird nachgetragen ([`with_fassung`]). Wo das
+//! Primitiv nackt ist (TXT-04, DOC-02/03), gilt die Herkunft der
+//! JOLux-Auflösung der Bridge direkt.
 
 use crate::tool::{McpTool, ToolContext, ToolError, ToolPool};
 use async_trait::async_trait;
@@ -22,7 +24,7 @@ use fedlex_akn::{
 };
 
 use fedlex_bridge::{AknFetcher, BridgeError, XmlSource};
-use fedlex_core::{Eli, Response, ValidAsOf};
+use fedlex_core::{Eli, Provenance, Response, ValidAsOf};
 use fedlex_jolux::{JoluxError, Language, SparqlClient};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -141,6 +143,16 @@ fn to_value<T: serde::Serialize>(data: T) -> Result<Value, ToolError> {
     serde_json::to_value(data).map_err(|e| ToolError::Upstream(format!("serialize: {e}")))
 }
 
+/// Trägt das Stand-Datum der von der Bridge aufgelösten Fassung
+/// (`date_applicability`) in eine AKN-seitig gebaute Provenance nach.
+/// Erst damit sieht der Konsument, welche Konsolidierung den Text wirklich
+/// trägt — der Stichtag allein suggeriert sonst (etwa bei künftigen
+/// Stichtagen) eine bestätigte Fassung, die es nicht gibt.
+fn with_fassung(mut prov: Provenance, doc_prov: &Provenance) -> Provenance {
+    prov.date_applicability = doc_prov.date_applicability.clone();
+    prov
+}
+
 /// Gemeinsamer erster Schritt aller Tools. Erlass zum Stichtag beschaffen.
 async fn fetch<C, S>(
     fetcher: &AknFetcher<C, S>,
@@ -200,7 +212,10 @@ where
         let (text, prov) = get_article_text(doc.data(), eid, ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(to_value(text)?, prov))
+        Ok(Response::new(
+            to_value(text)?,
+            with_fassung(prov, doc.provenance()),
+        ))
     }
 }
 
@@ -239,7 +254,10 @@ where
         let (text, prov) = get_element_text(doc.data(), eid, ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(to_value(text)?, prov))
+        Ok(Response::new(
+            to_value(text)?,
+            with_fassung(prov, doc.provenance()),
+        ))
     }
 }
 
@@ -292,7 +310,10 @@ where
         {
             prune_below_articles(&mut outline);
         }
-        Ok(Response::new(to_value(outline)?, prov))
+        Ok(Response::new(
+            to_value(outline)?,
+            with_fassung(prov, doc.provenance()),
+        ))
     }
 }
 
@@ -440,6 +461,7 @@ where
         let (markdown, prov) = get_readable_document(doc.data(), ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
+        let prov = with_fassung(prov, doc.provenance());
         // 68 §B-1: Ein einziger read_document-Aufruf wog live 210 KB (~50k
         // Tokens) — mehr als die meisten Agenten-Budgets für den ganzen
         // Recherche-Schritt. Zeichen-Budget mit ehrlichem Truncation-Signal
@@ -503,6 +525,7 @@ where
         let (refs, prov) = get_all_references(doc.data(), ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
+        let prov = with_fassung(prov, doc.provenance());
         // 68 §B-1/B-2: live 82 KB an Verweisen in einem Rutsch. Listenform
         // mit total/truncated — der Agent sieht, ob er alles hat.
         let limit = args
@@ -558,7 +581,10 @@ where
         let (mods, prov) = get_modifications(doc.data(), ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(to_value(mods)?, prov))
+        Ok(Response::new(
+            to_value(mods)?,
+            with_fassung(prov, doc.provenance()),
+        ))
     }
 }
 
@@ -835,7 +861,10 @@ where
         let (notes, prov) = extract_change_notes(doc.data(), within, ctx.stamp.valid_as_of())
             .map_err(map_akn)?
             .into_parts();
-        Ok(Response::new(to_value(notes)?, prov))
+        Ok(Response::new(
+            to_value(notes)?,
+            with_fassung(prov, doc.provenance()),
+        ))
     }
 }
 
