@@ -56,8 +56,10 @@ const CIT_VERSION_Q: &str = r#"SELECT ?sub WHERE {
         jolux:dateApplicability ?date .
   ?sub jolux:legalResourceSubdivisionIsPartOf ?cons ;
        jolux:legalResourceSubdivisionType <https://fedlex.data.admin.ch/vocabulary/subdivision-type/text> .
-  FILTER(?date <= "__DATE__"^^xsd:date)
+  FILTER(?date <= xsd:date("__DATE__"))
 } ORDER BY DESC(?date) LIMIT 1"#;
+// xsd:date(…)-Konstruktor, nie "…"^^xsd:date-Literal (Betriebsregel
+// Datumsvergleich, docs/10_LEXICON_jolux.md).
 
 /// Kurze Zweitquery (Prädikat mit «From» — muss unter der WAF-Schwelle
 /// bleiben): ausgehende Zitationen der aufgelösten Fassung, exakt gebunden.
@@ -283,7 +285,7 @@ mod tests {
         let queries = client.queries();
         assert_eq!(queries.len(), 2);
         // Hauptquery: Stichtags-Auflösung, «from»-frei.
-        assert!(queries[0].contains(r#"FILTER(?date <= "2026-01-01"^^xsd:date)"#));
+        assert!(queries[0].contains(r#"FILTER(?date <= xsd:date("2026-01-01"))"#));
         assert!(queries[0].contains("subdivision-type/text"));
         // Zweitquery: exakt an die Fassungs-URI gebunden, kein STRSTARTS-Scan.
         assert!(

@@ -132,8 +132,10 @@ const MANIF_Q: &str = r#"SELECT ?date ?url WHERE {
         jolux:isEmbodiedBy ?manif .
   ?manif jolux:isExemplifiedBy ?url .
   FILTER(CONTAINS(STR(?url), "__FMT__"))
-  FILTER(?date <= "__DATE__"^^xsd:date)
+  FILTER(?date <= xsd:date("__DATE__"))
 } ORDER BY DESC(?date) LIMIT 1"#;
+// xsd:date(…)-Konstruktor, nie "…"^^xsd:date-Literal (Betriebsregel
+// Datumsvergleich, docs/10_LEXICON_jolux.md).
 
 /// JLX-RES-04: Liefert die Download-URL der zum Stichtag gültigen Fassung
 /// im gewünschten Format.
@@ -272,7 +274,7 @@ mod tests {
 
         let q = client.last_query().unwrap();
         assert!(q.contains(r#"CONTAINS(STR(?url), "pdf")"#));
-        assert!(q.contains(r#"?date <= "2023-06-15"^^xsd:date"#));
+        assert!(q.contains(r#"?date <= xsd:date("2023-06-15")"#));
     }
 
     #[tokio::test]

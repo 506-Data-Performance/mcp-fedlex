@@ -70,6 +70,7 @@ Querschnitt-Invarianten (gelten für **jedes** Primitiv, werden nicht wiederholt
 - **eId-Normalisierung** vor jedem JOLux↔AKN-Abgleich. `_([a-z])($|/)` → `$1$2` (J18.2).
 - **Graceful Failure.** `{ error, hint }`, nie Crash.
 - **WAF-sichere Query-Autorenschaft.** Kein «from» (Variable oder Prädikatsname) in langen Queries — siehe [Betriebsregel WAF](#betriebsregel-die-fedlex-waf).
+- **Datumsvergleiche nur als `xsd:date(…)`-Konstruktor**, nie als typisiertes Literal — siehe [Betriebsregel Datumsvergleiche](#betriebsregel-datumsvergleiche-auf-virtuoso).
 
 ## Betriebsregel: Die Fedlex-WAF
 
@@ -100,6 +101,27 @@ HTML-Fehlerseite statt JSON).** Zwei Live-Vorfälle:
 4. Diagnose-Muster: Query **minimieren** bis 200, dann Elemente einzeln
    zurücklegen; Kontrollprobe mit inhaltsgleicher Junk-Variable trennt
    Signatur- von Längeneffekten.
+
+## Betriebsregel: Datumsvergleiche auf Virtuoso
+
+**Immer `xsd:date("YYYY-MM-DD")` (Konstruktor), nie `"YYYY-MM-DD"^^xsd:date`
+(typisiertes Literal) in FILTER-Vergleichen.**
+
+Live-Befund 2026-07-05 (T17-Erst-Ingest): `FILTER(?date <= "2026-07-04"^^xsd:date)`
+liefert bei einem Teil der Bestandsdaten **still 0 Treffer**, obwohl
+`DATATYPE(?date)` = `xsd:date` und der Wert korrekt ist — reproduzierbar an
+`eli/cc/1959/1972_2034_2058` (Konsolidierung 1960-01-01 mit AKN-XML, per
+Literal-Vergleich unsichtbar, per `xsd:date(…)`-Konstruktor und `STR(…)`-
+Vergleich sichtbar; junge Erlasse wie `eli/cc/2017/762` funktionieren mit
+beiden Formen). Vermutlich normalisiert Virtuoso einen Teil der historischen
+Literale intern nicht als native Dates. Der Fehlmodus ist heimtückisch:
+**kein Fehler, nur leere Ergebnisse** → sah im Ingest wie «Erlass hat keine
+Fassung» aus (186 Fehl-Skips in den ersten 293 Erlassen).
+
+Beide Formen sind exakt gleich lang (22 Zeichen) — die WAF-Regel oben bleibt
+unberührt. Analog gilt für `OPTIONAL`+`!BOUND`-Datumsfilter: auf Virtuoso
+fälschlich leer, stattdessen `FILTER NOT EXISTS` (Befund 2026-07-04,
+fedlex-indexer `erst_ingest.py`).
 
 ---
 

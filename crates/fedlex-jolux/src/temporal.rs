@@ -30,8 +30,12 @@ const CONS_Q: &str = r#"SELECT ?cons ?date ?url WHERE {
         jolux:isEmbodiedBy ?manif .
   ?manif jolux:isExemplifiedBy ?url .
   FILTER(CONTAINS(STR(?url), "xml"))
-  FILTER(?date <= "__DATE__"^^xsd:date)
+  FILTER(?date <= xsd:date("__DATE__"))
 } ORDER BY DESC(?date) LIMIT 1"#;
+// Konstruktor- statt Literal-Form im Datumsvergleich: Virtuoso liefert mit
+// `"…"^^xsd:date` bei einem Teil der Bestandsdaten still 0 Treffer
+// (Betriebsregel Datumsvergleich, docs/10_LEXICON_jolux.md; live-verifiziert
+// 2026-07-05 an eli/cc/1959/1972_2034_2058).
 
 /// Findet die zum Stichtag `as_of` gültige konsolidierte Fassung + ihre XML-URL.
 ///
@@ -243,7 +247,7 @@ mod tests {
 
         // Stichtags-Filter + Sprachvokabular landen korrekt in der Query.
         let q = client.last_query().unwrap();
-        assert!(q.contains(r#"FILTER(?date <= "2023-06-15"^^xsd:date)"#));
+        assert!(q.contains(r#"FILTER(?date <= xsd:date("2023-06-15"))"#));
         assert!(q.contains("/DEU"));
         assert!(q.contains("ORDER BY DESC(?date)"));
     }
