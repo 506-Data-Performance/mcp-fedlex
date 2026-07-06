@@ -80,28 +80,45 @@ pub async fn resolve_sr_number(
             .replace("__LANGURI__", lang.vocab_uri())
     );
     let res = client.query(&sparql).await?;
-    let mut hits: Vec<SrHit> = res
-        .bindings()
-        .iter()
-        .filter_map(|b| {
-            let ca = val(b, "ca")?;
-            Some(SrHit {
-                eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
-                title: val(b, "title").map(str::to_string),
-                in_force: crate::search::in_force_at(
-                    val(b, "status"),
-                    val(b, "entry"),
-                    val(b, "noLonger"),
-                    val(b, "endApp"),
-                    as_of,
-                ),
-                in_force_status: val(b, "status").map(str::to_string),
-                in_force_status_label: val(b, "statusLabel")
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string),
-            })
-        })
-        .collect();
+    let mut hits: Vec<SrHit> = Vec::new();
+    for b in res.bindings() {
+        let Some(ca) = val(b, "ca") else { continue };
+        let hit = SrHit {
+            eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
+            title: val(b, "title").map(str::to_string),
+            in_force: crate::search::in_force_at(
+                val(b, "status"),
+                val(b, "entry"),
+                val(b, "noLonger"),
+                val(b, "endApp"),
+                as_of,
+            ),
+            in_force_status: val(b, "status").map(str::to_string),
+            in_force_status_label: val(b, "statusLabel")
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+        };
+        // Dedup pro ELI (68 §F-19/Verify-V12): der UNION-Zweipfad
+        // (historicalLegalId + Taxonomie) und Mehrfach-Expressions lieferten
+        // denselben Erlass doppelt — live bei SR 818.102 sogar mit
+        // widerspruechlichen Labels in einer Antwort. Erste Zeile gewinnt,
+        // fehlende Felder werden nachgetragen (wie search_law::collect_hits).
+        match hits.iter_mut().find(|h| h.eli == hit.eli) {
+            Some(existing) => {
+                if existing.title.is_none() {
+                    existing.title = hit.title;
+                }
+                if existing.in_force.is_none() {
+                    existing.in_force = hit.in_force;
+                }
+                if existing.in_force_status.is_none() {
+                    existing.in_force_status = hit.in_force_status;
+                    existing.in_force_status_label = hit.in_force_status_label;
+                }
+            }
+            None => hits.push(hit),
+        }
+    }
     // Geltendes Recht zuerst (wie search_law verspricht) — bei
     // SR-Wiederverwendung ist der aufgehobene Alt-Erlass sonst der
     // erstbeste Treffer.
@@ -266,6 +283,35 @@ mod tests {
         assert!(q.contains(r#"skos:notation "730.0"^^"#));
         assert!(q.contains("classifiedByTaxonomyEntry"));
         assert!(q.contains("SELECT DISTINCT"));
+    }
+
+    /// 68 §F-19/Verify-V12 (live bei SR 818.102): der UNION-Zweipfad lieferte
+    /// dieselbe ELI doppelt, teils mit widerspruechlichen Status-Labels in
+    /// EINER Antwort. Jetzt: ein Treffer pro ELI, Felder gemerged.
+    #[tokio::test]
+    async fn duplicate_ca_rows_collapse_and_merge() {
+        let client = MockSparqlClient::from_json(
+            r#"{"head":{"vars":["ca","title","status","statusLabel","entry"]},"results":{"bindings":[
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1995/1328_1328_1328"},
+               "entry":{"type":"literal","value":"1995-01-01"}},
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1995/1328_1328_1328"},
+               "title":{"type":"literal","xml:lang":"de","value":"Verordnung ueber die Krankenversicherung"},
+               "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"},
+               "statusLabel":{"type":"literal","xml:lang":"de","value":"In Kraft"},
+               "entry":{"type":"literal","value":"1995-01-01"}}
+            ]}}"#,
+        );
+        let hits = resolve_sr_number(
+            &client,
+            "818.102",
+            Language::De,
+            ValidAsOf::new(swiss_today()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(hits.len(), 1, "Duplikat nicht kollabiert: {hits:?}");
+        assert!(hits[0].title.as_deref().unwrap().contains("Verordnung"));
+        assert_eq!(hits[0].in_force_status_label.as_deref(), Some("In Kraft"));
     }
 
     #[tokio::test]
