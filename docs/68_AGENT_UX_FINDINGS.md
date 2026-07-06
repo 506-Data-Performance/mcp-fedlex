@@ -295,7 +295,7 @@ C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
 | V-1 | truncated:false trotz Recall-Lücke — der F-19-Dedup schrumpfte NACH dem SPARQL-LIMIT | 🟢 Overfetch limit×2, Kappung nach Dedup (d21777f) |
 | V-2 | Stub-ELIs (eli/cc/2020/2930_cc) als vollwertige Treffer | 🟢 stub:true-Marker (weder Status noch Datum), sortiert ans Gruppen-Ende (d21777f) |
 | V-3 | Null-Daten als kind=norm (check_in_force lauter Nulls → in_force:false) | 🟢 no_enforcement_data:true kennzeichnet «keine Daten» (d21777f) |
-| V-4 | Cloudflare-BIC bannt Python-urllib/libwww-perl vor dem ersten MCP-Byte | 🟡 Rezept im k3-infra-Runbook (bafff51); Dashboard-Toggle ausstehend |
+| V-4 | Cloudflare-BIC bannt Python-urllib/libwww-perl vor dem ersten MCP-Byte | 🟢 Configuration Rule «BIC off» fuer /rpc,/mcp,/sse deployt 2026-07-07; verifiziert (Bot-UA /rpc→200, /mcp→401, Docs bleibt 403). Runbook k3-infra b191fb9 |
 | V-5 | Nonsens-Queries erzeugen unauffällige Scores | 🟡 Mitigation: «NICHT kalibriert» in instructions+Schema (semantic c1edb0e); echte Detektion braucht Goldset-Experiment |
 | V-6 | exclude_source_eli filterte nach dem Retrieval → falsche 0-Treffer | 🟢 serverseitig via Qdrant must_not (semantic 437f83d) |
 | V-7 | Stille Koersion optionaler Argumente (as_of:Zahl→heute; rerank:"yes"→false; top_k:-5→20) | 🟢 beidseitig typ-streng (82583d6, semantic e385a2c) |
