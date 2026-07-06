@@ -203,7 +203,23 @@ where
         .map_err(map_jolux)?;
         let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(capped_list("hits", annotated, limit), prov))
+        let mut data = capped_list("hits", annotated, limit);
+        // 68 §F-5/F-32: Leere Trefferlisten liessen den Agenten wortlos
+        // allein — der Explorer-Lauf zeigte Sackgassen bei Paraphrasen
+        // («Ferienanspruch Arbeitnehmer») ohne jeden Wegweiser. Der Hinweis
+        // erklärt die Match-Semantik und nennt die Auswege.
+        if data["hits"].as_array().is_some_and(Vec::is_empty) {
+            data["hint"] = json!(
+                "Keine Treffer. search_law matcht woertlich auf Titel, amtliches \
+                 Kuerzel (OR, ZGB, ...) und Volksnamen — keine Synonyme, keine \
+                 Umschreibungen. Reformuliere mit einem Wort aus dem amtlichen \
+                 Titel (z.B. 'Datenschutz' statt 'Privatsphaere'); fuer \
+                 Sachverhalts- oder Laienfragen nutze semantic_search \
+                 (mcp-fedlex-semantic), sofern verfuegbar; Zitat-Strings wie \
+                 'Art. 329d Abs. 1 OR' zerlegt parse_unlinked_ref."
+            );
+        }
+        Ok(Response::new(data, prov))
     }
 }
 
@@ -748,6 +764,11 @@ mod tests {
         assert!(out["data"]["hits"].as_array().unwrap().is_empty());
         assert_eq!(out["provenance"]["kind"], "hint");
         assert!(out.get("error").is_none());
+        // 68 §F-5/F-32: Die leere Liste erklärt sich und nennt Auswege
+        // (Reformulierung, semantic_search, parse_unlinked_ref).
+        let hint = out["data"]["hint"].as_str().expect("hint bei 0 Treffern");
+        assert!(hint.contains("semantic_search"), "{hint}");
+        assert!(hint.contains("parse_unlinked_ref"), "{hint}");
     }
 
     #[tokio::test]

@@ -55,7 +55,11 @@ const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?
   OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
   FILTER(
     CONTAINS(LCASE(STR(?title)), LCASE("__QUERY__")) ||
-    (BOUND(?alt) && CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY__")))
+    CONTAINS(LCASE(STR(?title)), LCASE("__QUERY2__")) ||
+    (BOUND(?alt) && (
+      CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY__")) ||
+      CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY2__"))
+    ))
   )
 } LIMIT __LIMIT__"#;
 
@@ -82,6 +86,47 @@ const ABBREV_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?
 fn looks_like_abbreviation(query: &str) -> bool {
     let t = query.trim();
     !t.is_empty() && t.chars().count() <= 12 && t.split_whitespace().count() <= 2
+}
+
+/// ASCII-Transliteration zurück zu Umlauten («ueber» → «über»), damit
+/// ASCII-Anfragen Titel mit echten Umlauten treffen (68 §F-5: «ueber» fand
+/// 0, «über» 1 Treffer — kommentarlos). Ersetzt ue/oe/ae nur am Wortanfang
+/// oder nach Konsonant: nach Vokal ist die Folge fast immer echt (Steuer,
+/// Bauer, Israel). `None`, wenn nichts zu ersetzen ist. Die Variante läuft
+/// als ODER-Zweig neben der Original-Anfrage — ein Fehlgriff der Heuristik
+/// kostet nur einen wirkungslosen Vergleich, nie einen Treffer.
+fn umlaut_variant(query: &str) -> Option<String> {
+    let chars: Vec<char> = query.chars().collect();
+    let mut out = String::with_capacity(query.len());
+    let mut changed = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let after_vowel = out
+            .chars()
+            .last()
+            .is_some_and(|p| "aeiouäöüAEIOUÄÖÜ".contains(p));
+        let repl = match (chars[i], chars.get(i + 1)) {
+            ('u', Some('e')) if !after_vowel => Some('ü'),
+            ('U', Some('e')) if !after_vowel => Some('Ü'),
+            ('o', Some('e')) if !after_vowel => Some('ö'),
+            ('O', Some('e')) if !after_vowel => Some('Ö'),
+            ('a', Some('e')) if !after_vowel => Some('ä'),
+            ('A', Some('e')) if !after_vowel => Some('Ä'),
+            _ => None,
+        };
+        match repl {
+            Some(r) => {
+                out.push(r);
+                changed = true;
+                i += 2;
+            }
+            None => {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    changed.then_some(out)
 }
 
 /// Geltung eines Treffers **zum Stichtag** (68 §F-3, Doppel-Logik J3.2/J3.3).
@@ -154,11 +199,14 @@ pub async fn search_law(
         collect_hits(&res, as_of, 0, &mut grouped);
     }
 
-    // Gruppe 1: Substring auf Titel/Volksnamen.
+    // Gruppe 1: Substring auf Titel/Volksnamen — die Umlaut-Variante
+    // («ueber» → «über») läuft als ODER-Zweig mit (68 §F-5).
+    let variant = umlaut_variant(&safe).unwrap_or_else(|| safe.clone());
     let sparql = format!(
         "{PREFIXES}{}",
         SEARCH_Q
             .replace("__LANGURI__", lang.vocab_uri())
+            .replace("__QUERY2__", &variant)
             .replace("__QUERY__", &safe)
             .replace("__LIMIT__", &limit.to_string())
     );
@@ -444,6 +492,41 @@ mod tests {
         assert_eq!(hits.len(), 1, "Duplikat nicht kollabiert: {hits:?}");
         // Die sr_number aus der zweiten Zeile ist nachgetragen.
         assert_eq!(hits[0].sr_number.as_deref(), Some("235.3"));
+    }
+
+    /// 68 §F-5: «ueber» fand 0, «über» 1 Treffer. Die ASCII-Anfrage nimmt
+    /// jetzt die Umlaut-Variante als ODER-Zweig mit; echte u+e-Folgen nach
+    /// Vokal (Steuer, Bauer) bleiben unangetastet.
+    #[test]
+    fn umlaut_variant_transliterate_rules() {
+        assert_eq!(
+            umlaut_variant("Bundesgesetz ueber den Datenschutz").as_deref(),
+            Some("Bundesgesetz über den Datenschutz")
+        );
+        assert_eq!(umlaut_variant("Ueber").as_deref(), Some("Über"));
+        assert_eq!(umlaut_variant("Waelder").as_deref(), Some("Wälder"));
+        assert_eq!(umlaut_variant("Gehoer").as_deref(), Some("Gehör"));
+        // Nach Vokal ist ue/ae echt — keine Ersetzung, also keine Variante.
+        assert_eq!(umlaut_variant("Steuer"), None);
+        assert_eq!(umlaut_variant("Bauer"), None);
+        assert_eq!(umlaut_variant("Datenschutz"), None);
+    }
+
+    #[tokio::test]
+    async fn ascii_query_carries_umlaut_variant_in_filter() {
+        let client = MockSparqlClient::from_json(FIXTURE);
+        let _ = search_law(
+            &client,
+            "Bundesgesetz ueber den Datenschutz",
+            Language::De,
+            10,
+            today(),
+        )
+        .await
+        .unwrap();
+        let q = client.last_query().unwrap();
+        assert!(q.contains("Bundesgesetz ueber den Datenschutz"));
+        assert!(q.contains("Bundesgesetz über den Datenschutz"));
     }
 
     #[tokio::test]
