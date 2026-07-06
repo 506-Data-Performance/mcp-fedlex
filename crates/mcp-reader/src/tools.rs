@@ -171,10 +171,24 @@ where
 {
     let eli = arg_eli(args)?;
     let lang = arg_lang(args)?;
+    let as_of = ctx.stamp.valid_as_of();
     fetcher
-        .fetch_akn_document(&eli, ctx.stamp.valid_as_of(), lang)
+        .fetch_akn_document(&eli, as_of, lang)
         .await
-        .map_err(map_bridge)
+        .map_err(|err| match err {
+            // 68 §F-2/F-13: Das nackte «not found: <uri>» wurde als «Erlass
+            // existiert nicht» gelesen — real fehlte nur die XML-Fassung zum
+            // Stichtag (aeltere Konsolidierungen gibt es erst ab ~2021 als
+            // XML, J14.2) oder die Sprachfassung (rm). Die Meldung benennt
+            // jetzt, WAS fehlt; der Hint (tool.rs) nennt die Prüfwege.
+            BridgeError::Jolux(JoluxError::NotFound(_)) => ToolError::NotFound(format!(
+                "keine konsolidierte XML-Fassung fuer `{}` zum Stichtag {} in Sprache `{}`",
+                eli.as_str(),
+                as_of,
+                lang.tag()
+            )),
+            other => map_bridge(other),
+        })
 }
 
 // ---------------------------------------------------------------------------

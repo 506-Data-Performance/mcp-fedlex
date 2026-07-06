@@ -125,6 +125,12 @@ impl ToolError {
             ToolError::NotFound(what) if what.contains("eId") => {
                 "Die eId existiert in dieser Fassung nicht. Hole die Gliederung mit get_structure oder finde die Stelle mit search_text."
             }
+            // 68 §F-2/F-13: fehlende Fassung ist NICHT «Erlass existiert
+            // nicht» — der alte, zirkulaere Hint (search_law) schickte den
+            // Agenten im Kreis, obwohl list_versions die Konsolidierung kannte.
+            ToolError::NotFound(what) if what.contains("XML-Fassung") => {
+                "Der Erlass kann existieren, auch wenn diese Fassung fehlt: (1) aeltere Fassungen (vor ~2021) liegen oft nur als PDF vor — pruefe die vorhandenen Konsolidierungen mit list_versions; (2) fehlt nur die Sprachfassung, zeigt list_expressions die verfuegbaren Sprachen; (3) ist der ELI unsicher, nutze search_law oder resolve_sr_number."
+            }
             ToolError::NotFound(_) => {
                 "Die Ressource existiert nicht. Pruefe ELI und Stichtag (as_of) oder finde den Erlass mit search_law bzw. resolve_sr_number."
             }
@@ -186,6 +192,41 @@ pub trait McpTool: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 68 §F-2/F-13: Der frühere Hint schickte bei fehlender XML-/Sprach-
+    /// Fassung im Kreis (search_law fuer einen Erlass, den list_versions
+    /// laengst kannte). Fassungs-Fehler nennen jetzt die Prüfwege.
+    #[test]
+    fn missing_consolidation_hint_names_versions_and_expressions() {
+        let err = ToolError::NotFound(
+            "keine konsolidierte XML-Fassung fuer `eli/cc/1993/1945_1945_1945` \
+             zum Stichtag 2014-01-01 in Sprache `de`"
+                .into(),
+        );
+        let hint = err.hint();
+        assert!(hint.contains("list_versions"), "{hint}");
+        assert!(hint.contains("list_expressions"), "{hint}");
+        assert!(hint.contains("PDF"), "{hint}");
+        // Der generische Kreis-Hint gilt weiterhin fuer echte Nicht-Existenz.
+        let generic = ToolError::NotFound("irgendwas".into());
+        assert!(generic.hint().contains("search_law"));
+    }
+
+    /// 68 §F-16: «fehlt» vs. «falscher Typ» sind verschiedene Diagnosen.
+    #[test]
+    fn require_str_distinguishes_missing_from_wrong_type() {
+        use serde_json::json;
+        let missing = require_str(&json!({}), "eid").unwrap_err();
+        assert!(missing.to_string().contains("fehlt"));
+        let wrong = require_str(&json!({"eid": 21}), "eid").unwrap_err();
+        assert!(
+            wrong
+                .to_string()
+                .contains("muss ein String sein, nicht Zahl"),
+            "{wrong}"
+        );
+        assert!(!wrong.to_string().contains("fehlt"));
+    }
 
     // ADR-007: die Live-SPARQL-Pools wiegen im Quota schwerer als lokale
     // Navigation — und JoluxMetadata trägt exakt das Discovery-Gewicht
