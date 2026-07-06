@@ -282,3 +282,28 @@ C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
 | F-32 | Schönheit | Verbrückung einseitig: kein Reader-Hinweis auf die semantische Alternative bei 0 Treffern | `search_law` mit Laienfrage | 🟢 Reader: 0-Treffer-hint verweist auf semantic_search (3e90d07); semantic nennt den Partner als mcp-fedlex-reader (4918d5e) |
 | F-33 | Schönheit | get_citations englisch ohne lang-Param; Caveat «leere Liste ≠ nie geändert» fehlt in leerer Antwort; JLX-/AKN-Codes unerklärt | diverse | 🔴 |
 | F-34 | Schönheit | search_law p50 ≈ 800 ms — langsamstes Tool ausgerechnet in der Recovery-Schleife | Latenz-Logs | 🔴 |
+
+---
+
+## V — Verifikations-Zweitlauf 2026-07-06 (neue Findings) — Abarbeitung 2026-07-07
+
+> Quelle: `benchmarks/mcp-explorer` `runs/2026-07-06-verify/REPORT.md` §10 (Bilanz Iteration 1:
+> 13 behoben, 10 verbessert). Semantic-seitige Fixes referenzieren das Sibling-Repo.
+
+| Nr | Finding (ein Satz) | Status |
+|---|---|---|
+| V-1 | truncated:false trotz Recall-Lücke — der F-19-Dedup schrumpfte NACH dem SPARQL-LIMIT | 🟢 Overfetch limit×2, Kappung nach Dedup (d21777f) |
+| V-2 | Stub-ELIs (eli/cc/2020/2930_cc) als vollwertige Treffer | 🟢 stub:true-Marker (weder Status noch Datum), sortiert ans Gruppen-Ende (d21777f) |
+| V-3 | Null-Daten als kind=norm (check_in_force lauter Nulls → in_force:false) | 🟢 no_enforcement_data:true kennzeichnet «keine Daten» (d21777f) |
+| V-4 | Cloudflare-BIC bannt Python-urllib/libwww-perl vor dem ersten MCP-Byte | 🟡 Rezept im k3-infra-Runbook (bafff51); Dashboard-Toggle ausstehend |
+| V-5 | Nonsens-Queries erzeugen unauffällige Scores | 🟡 Mitigation: «NICHT kalibriert» in instructions+Schema (semantic c1edb0e); echte Detektion braucht Goldset-Experiment |
+| V-6 | exclude_source_eli filterte nach dem Retrieval → falsche 0-Treffer | 🟢 serverseitig via Qdrant must_not (semantic 437f83d) |
+| V-7 | Stille Koersion optionaler Argumente (as_of:Zahl→heute; rerank:"yes"→false; top_k:-5→20) | 🟢 beidseitig typ-streng (82583d6, semantic e385a2c) |
+| V-8 | Semantic-Kaltstart ~7 s unkommuniziert | 🟢 Warmup beim Boot hinter der startupProbe (semantic c1edb0e) |
+| V-9 | Sprach-/Korpus-Coverage unsichtbar | 🟡 language:de in index_info (semantic c1edb0e); ELI-Zähler/Frische bleiben offen (=F-8) |
+| V-10 | Semantic-Treffer ohne Erlass-Titel → Metadata-Aufruf je ELI | 🟢 title im Hit (Qdrant-Payload; Bestandsdaten nach Re-Ingest) (semantic 5aafba8) |
+| V-11 | parse_unlinked_ref verwirft lit./Bst./Ziff. stillschweigend | 🟢 sub_reference erhält die Feinreferenz roh (ae4c2f1) |
+| V-12 | resolve_sr_number: dieselbe ELI doppelt mit widersprüchlichen Labels (SR 818.102) | 🟢 Dedup pro ELI + Feld-Merge (e480a42) |
+| V-20 | resolve_consolidation_at: nacktes not-found statt Fassungs-Diagnose | 🟢 gleiche differenzierte Meldung wie F-2 (ae4c2f1) |
+| V-24 | index_info-outputSchema beschrieb hits-Felder, die es nie gibt | 🟢 eigenes Schema (semantic c1edb0e) |
+| V-28 | get_article_history verschweigt Einfügung 2021 (OR 329g); list_versions ohne XML-Verfügbarkeit | 🔴 Untersuchungs-Ticket: Impact-Query-Lücke vs. Daten-Realität live klären |
