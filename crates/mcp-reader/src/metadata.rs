@@ -412,10 +412,10 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet die Aenderungen, die auf einen EINZELNEN Artikel eines Erlasses gewirkt haben (JLX-IMP-02). Der eID wird normalisiert (z.B. art_14_a -> art_14a). Caveat (wie get_impacts): seit 2023 oft nur im Freitext-`comment` des Gesamterlass-Impacts - leere Liste ist KEIN Beweis fuer 'nie geaendert'. Liefert einen BELEG (kind=norm).",
+            "description": "Listet die Aenderungen, die auf einen EINZELNEN Artikel eines Erlasses gewirkt haben (JLX-IMP-02). Beide eid-Schreibweisen werden akzeptiert — kanonisch ist die AKN-Form mit Unterstrich (art_14_a, wie read_element); die JOLux-Seite (art_14a) normalisiert der Server selbst. Caveat (wie get_impacts): seit 2023 oft nur im Freitext-`comment` des Gesamterlass-Impacts - leere Liste ist KEIN Beweis fuer 'nie geaendert'. Liefert einen BELEG (kind=norm).",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" },
-                "eid": { "type": "string", "description": "eID des Artikels, z.B. art_14a oder art_2b/para_1" }
+                "eid": { "type": "string", "description": "eID des Artikels, z.B. art_14_a oder art_2_b/para_1 (JOLux-Kurzform art_14a wird ebenfalls akzeptiert)" }
             },
             "required": ["eli", "eid"]
         })

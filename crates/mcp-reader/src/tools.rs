@@ -320,12 +320,18 @@ where
         // volle Baum bis auf Absatz-Ebene wog live 95 KB (~24k Tokens) und
         // erschlug genau den Kontext, dem er Überblick geben soll. Default
         // daher Artikel-Skelett; der volle Baum bleibt per depth=full.
-        if args
-            .get("depth")
-            .and_then(Value::as_str)
-            .unwrap_or("article")
-            != "full"
-        {
+        // 68 §F-22: unbekannte depth-Werte fielen still auf den Default —
+        // «depth: unsinn» sah aus wie eine beantwortete Wahl.
+        let depth = match args.get("depth") {
+            None | Some(Value::Null) => "article",
+            Some(Value::String(s)) if s == "article" || s == "full" => s.as_str(),
+            Some(other) => {
+                return Err(ToolError::InvalidArguments(format!(
+                    "`depth` muss article|full sein, nicht `{other}`"
+                )));
+            }
+        };
+        if depth != "full" {
             prune_below_articles(&mut outline);
         }
         Ok(Response::new(
@@ -531,7 +537,7 @@ where
             "description": "Verweise (<ref>) des Erlasses (AKN-REF-01) als Liste {references, total, truncated}. Fedlex-hrefs zeigen auf Work-Ebene, Stichtagsauflösung läuft über die Tools selbst.",
             "properties": {
                 "eli": { "type": "string" },
-                "limit": { "type": "integer", "default": 200, "description": "Max. Anzahl Verweise; total nennt die Gesamtzahl, truncated signalisiert die Kappung." },
+                "limit": { "type": "integer", "default": 200, "description": "Max. Anzahl Verweise (Default 200 — bewusst hoeher als die 20/50-Suchlimits: Verweise sind kompakte Tupel und das Tool paginiert); total nennt die Gesamtzahl, truncated signalisiert die Kappung." },
                 "offset": { "type": "integer", "default": 0, "description": "Start-Index für Fortsetzung" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
