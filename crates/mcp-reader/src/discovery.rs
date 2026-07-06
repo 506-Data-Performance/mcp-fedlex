@@ -186,8 +186,9 @@ where
             "type": "object",
             "description": "Sucht Bundeserlasse nach Titel, Volksnamen oder amtlichem Kuerzel (Discovery, JLX-RES-02). Kuerzel wie OR, ZGB, DSG werden exakt ueber die amtliche Abkuerzung aufgeloest und stehen zuerst. Treffer tragen in_force ZUM STICHTAG as_of (zum Stichtag geltendes Recht je Gruppe zuerst; fehlt in_force, mit check_in_force pruefen; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
             "properties": {
-                "query": { "type": "string", "description": "Titel-Stichwort, z.B. Energiegesetz" },
+                "query": { "type": "string", "description": "Titel-Stichwort, amtliches Kuerzel oder Volksname, z.B. Energiegesetz, OR, Arbeitsgesetz" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 },
+                "offset": { "type": "integer", "default": 0, "description": "Blaettert bei truncated=true weiter: naechste Seite mit offset = offset + limit_applied (68 F-9)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["query"]
@@ -197,6 +198,13 @@ where
         let query = arg_str(&args, "query")?;
         let lang = arg_lang(&args)?;
         let limit = arg_limit(&args);
+        // 68 §F-9: truncated=true war eine Sackgasse — der Rest der Treffer
+        // blieb ohne offset unerreichbar.
+        let offset = args
+            .get("offset")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            .min(1000) as u32;
         // 68 §F-3: in_force der Treffer bezieht sich auf den Stichtag der
         // Anfrage, nicht auf den heutigen Graph-Status.
         let hits = search_law(
@@ -204,6 +212,7 @@ where
             query,
             lang,
             limit,
+            offset,
             ctx.stamp.valid_as_of(),
         )
         .await
@@ -211,11 +220,14 @@ where
         let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
         let mut data = capped_list("hits", annotated, limit);
+        // 68 §F-9: das effektiv angewandte offset sichtbar machen — wie
+        // limit_applied, damit die Blaetter-Position nie geraten werden muss.
+        data["offset_applied"] = json!(offset);
         // 68 §F-5/F-32: Leere Trefferlisten liessen den Agenten wortlos
         // allein — der Explorer-Lauf zeigte Sackgassen bei Paraphrasen
         // («Ferienanspruch Arbeitnehmer») ohne jeden Wegweiser. Der Hinweis
         // erklärt die Match-Semantik und nennt die Auswege.
-        if data["hits"].as_array().is_some_and(Vec::is_empty) {
+        if data["hits"].as_array().is_some_and(Vec::is_empty) && offset == 0 {
             data["hint"] = json!(
                 "Keine Treffer. search_law matcht woertlich auf Titel, amtliches \
                  Kuerzel (OR, ZGB, ...) und Volksnamen — keine Synonyme, keine \

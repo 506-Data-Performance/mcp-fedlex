@@ -156,6 +156,7 @@ async fn jlx_res_02_search_law() {
         "Energiegesetz",
         Language::De,
         20,
+        0,
         ValidAsOf::new(swiss_today()),
     )
     .await

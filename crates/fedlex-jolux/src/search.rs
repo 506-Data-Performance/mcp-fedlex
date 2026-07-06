@@ -61,7 +61,7 @@ const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?
       CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY2__"))
     ))
   )
-} LIMIT __LIMIT__"#;
+} LIMIT __LIMIT__ OFFSET __OFFSET__"#;
 
 // Exakte Kürzel-Auflösung über die amtliche Abkürzung (68 §F-4). Eigene,
 // billige Vorabfrage (~0.4 s live) statt OR im Haupt-FILTER: dort verdrängte
@@ -180,14 +180,17 @@ pub async fn search_law(
     query: &str,
     lang: Language,
     limit: u32,
+    offset: u32,
     as_of: ValidAsOf,
 ) -> Result<Vec<LawHit>, JoluxError> {
     let safe = query.replace(['"', '\\'], " ");
 
     // Gruppe 0: exakte Kürzel-Treffer (nur wenn die Anfrage wie ein Kürzel
     // aussieht — lange Phrasen sparen sich die Vorabfrage und ihre Latenz).
+    // Beim Blättern (offset > 0, 68 §F-9) entfällt sie: die Kürzel-Treffer
+    // standen vollständig auf der ersten Seite.
     let mut grouped: Vec<(u8, LawHit)> = Vec::new();
-    if looks_like_abbreviation(&safe) {
+    if offset == 0 && looks_like_abbreviation(&safe) {
         let sparql = format!(
             "{PREFIXES}{}",
             ABBREV_Q
@@ -209,6 +212,7 @@ pub async fn search_law(
             .replace("__QUERY2__", &variant)
             .replace("__QUERY__", &safe)
             .replace("__LIMIT__", &limit.to_string())
+            .replace("__OFFSET__", &offset.to_string())
     );
     let res = client.query(&sparql).await?;
     collect_hits(&res, as_of, 1, &mut grouped);
@@ -305,7 +309,7 @@ mod tests {
     #[tokio::test]
     async fn hits_carry_in_force_and_current_law_sorts_first() {
         let client = MockSparqlClient::from_json(FIXTURE);
-        let hits = search_law(&client, "energie", Language::De, 10, today())
+        let hits = search_law(&client, "energie", Language::De, 10, 0, today())
             .await
             .unwrap();
         assert_eq!(hits.len(), 2);
@@ -336,7 +340,7 @@ mod tests {
                "title":{"type":"literal","xml:lang":"de","value":"Testgesetz"}}
             ]}}"#,
         );
-        let hits = search_law(&client, "test", Language::De, 10, today())
+        let hits = search_law(&client, "test", Language::De, 10, 0, today())
             .await
             .unwrap();
         assert_eq!(hits[0].in_force, None);
@@ -365,7 +369,7 @@ mod tests {
             ]}}"#,
         );
         let as_of = ValidAsOf::new(date!(2020 - 06 - 01));
-        let hits = search_law(&client, "Datenschutz", Language::De, 10, as_of)
+        let hits = search_law(&client, "Datenschutz", Language::De, 10, 0, as_of)
             .await
             .unwrap();
         // Am Stichtag gilt der Alt-Erlass — er steht zuerst.
@@ -386,6 +390,7 @@ mod tests {
             "energie",
             Language::De,
             10,
+            0,
             ValidAsOf::new(date!(2020 - 06 - 01)),
         )
         .await
@@ -413,7 +418,7 @@ mod tests {
            "entry":{"type":"literal","value":"1960-05-15"}}
         ]}}"#;
         let client = MockSparqlClient::from_json_sequence(&[abbrev, noise]);
-        let hits = search_law(&client, "OR", Language::De, 10, today())
+        let hits = search_law(&client, "OR", Language::De, 10, 0, today())
             .await
             .unwrap();
         assert_eq!(hits.len(), 2);
@@ -428,6 +433,19 @@ mod tests {
         assert!(qs[1].contains("CONTAINS(LCASE(STR(?title))"));
     }
 
+    /// 68 §F-9: offset landet in der Substring-Query; die Kürzel-Vorabfrage
+    /// entfällt beim Blättern (ihre Treffer standen komplett auf Seite 1).
+    #[tokio::test]
+    async fn offset_pages_substring_query_and_skips_abbrev() {
+        let client = MockSparqlClient::from_json(FIXTURE);
+        let _ = search_law(&client, "OR", Language::De, 10, 20, today())
+            .await
+            .unwrap();
+        let qs = client.queries();
+        assert_eq!(qs.len(), 1, "keine Kürzel-Vorabfrage beim Blättern");
+        assert!(qs[0].contains("LIMIT 10 OFFSET 20"));
+    }
+
     /// Lange Phrasen sind nie Kürzel — keine Vorabfrage, keine Extra-Latenz.
     #[tokio::test]
     async fn long_phrase_skips_abbreviation_query() {
@@ -437,6 +455,7 @@ mod tests {
             "Bundesgesetz über den Datenschutz",
             Language::De,
             10,
+            0,
             today(),
         )
         .await
@@ -459,7 +478,7 @@ mod tests {
                "entry":{"type":"literal","value":"2023-09-01"}}
             ]}}"#,
         );
-        let hits = search_law(&client, "Datenschutzgesetz", Language::De, 10, today())
+        let hits = search_law(&client, "Datenschutzgesetz", Language::De, 10, 0, today())
             .await
             .unwrap();
         assert_eq!(hits.len(), 1);
@@ -486,7 +505,7 @@ mod tests {
                "entry":{"type":"literal","value":"2019-03-01"}}
             ]}}"#,
         );
-        let hits = search_law(&client, "Datenschutz", Language::De, 10, today())
+        let hits = search_law(&client, "Datenschutz", Language::De, 10, 0, today())
             .await
             .unwrap();
         assert_eq!(hits.len(), 1, "Duplikat nicht kollabiert: {hits:?}");
@@ -520,6 +539,7 @@ mod tests {
             "Bundesgesetz ueber den Datenschutz",
             Language::De,
             10,
+            0,
             today(),
         )
         .await
@@ -532,7 +552,7 @@ mod tests {
     #[tokio::test]
     async fn neutralizes_injection_in_query() {
         let client = MockSparqlClient::from_json(FIXTURE);
-        let _ = search_law(&client, r#"a") } INJECT {"#, Language::De, 5, today())
+        let _ = search_law(&client, r#"a") } INJECT {"#, Language::De, 5, 0, today())
             .await
             .unwrap();
         let q = client.last_query().unwrap();
