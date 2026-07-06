@@ -89,22 +89,26 @@ where
 
 /// Pflicht-Argument `eli` lesen und validieren.
 fn arg_eli(args: &Value) -> Result<Eli, ToolError> {
-    let raw = args
-        .get("eli")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::InvalidArguments("`eli` (string) fehlt".into()))?;
+    let raw = arg_str(args, "eli")?;
     Eli::new(raw).map_err(|e| ToolError::InvalidArguments(e.to_string()))
 }
 
-/// Pflicht-Argument mit gegebenem Namen als String lesen.
-fn arg_str<'a>(args: &'a Value, name: &str) -> Result<&'a str, ToolError> {
-    args.get(name)
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::InvalidArguments(format!("`{name}` (string) fehlt")))
-}
+/// Pflicht-Argument mit gegebenem Namen als String lesen (68 §F-16:
+/// unterscheidet «fehlt» von «falscher Typ», zentral in [`crate::tool`]).
+use crate::tool::require_str as arg_str;
 
 /// Optionales Argument `lang` lesen (Default Deutsch).
 fn arg_lang(args: &Value) -> Result<Language, ToolError> {
+    // 68 §F-16/F-22: falscher Typ fiel still auf Deutsch zurueck.
+    if let Some(v) = args.get("lang")
+        && !v.is_null()
+        && !v.is_string()
+    {
+        return Err(ToolError::InvalidArguments(format!(
+            "`lang` muss ein String (de|fr|it|en|rm) sein, nicht {}",
+            crate::tool::json_type_name(v)
+        )));
+    }
     match args.get("lang").and_then(Value::as_str) {
         None => Ok(Language::De),
         Some("de") => Ok(Language::De),
@@ -1293,6 +1297,37 @@ mod tests {
             .dispatch(&ctx(), "read_article", json!({ "eid": "art_1" }))
             .await;
         assert!(out["error"].as_str().unwrap().contains("invalid arguments"));
+        assert!(out["error"].as_str().unwrap().contains("fehlt"));
+    }
+
+    /// 68 §F-16: `eid: 21` ist ein Typfehler, kein fehlendes Feld — die
+    /// Diagnose «fehlt» war faktisch falsch und irritierte den Agenten.
+    #[tokio::test]
+    async fn wrong_type_is_reported_as_type_error_not_missing() {
+        let out = registry()
+            .dispatch(
+                &ctx(),
+                "read_article",
+                json!({ "eli": "eli/cc/2017/762", "eid": 21 }),
+            )
+            .await;
+        let err = out["error"].as_str().unwrap();
+        assert!(err.contains("muss ein String sein, nicht Zahl"), "{err}");
+        assert!(!err.contains("fehlt"), "{err}");
+    }
+
+    /// 68 §F-16/F-22: `lang` mit falschem Typ fiel still auf Deutsch zurück.
+    #[tokio::test]
+    async fn wrong_lang_type_errors_instead_of_silent_default() {
+        let out = registry()
+            .dispatch(
+                &ctx(),
+                "read_article",
+                json!({ "eli": "eli/cc/2017/762", "eid": "art_1", "lang": 7 }),
+            )
+            .await;
+        let err = out["error"].as_str().unwrap();
+        assert!(err.contains("`lang` muss ein String"), "{err}");
     }
 
     #[tokio::test]

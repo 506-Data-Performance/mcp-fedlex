@@ -117,17 +117,25 @@ where
 // Argument-Parsing & Fehler-Mapping (gespiegelt aus discovery.rs)
 // ---------------------------------------------------------------------------
 
-/// Pflicht-Argument `eli` als validiertes [`Eli`] lesen.
+/// Pflicht-Argument `eli` als validiertes [`Eli`] lesen (68 §F-16:
+/// Typfehler werden als Typfehler gemeldet, nicht als «fehlt»).
 fn arg_eli(args: &Value) -> Result<Eli, ToolError> {
-    let raw = args
-        .get("eli")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::InvalidArguments("`eli` (string) fehlt".into()))?;
+    let raw = crate::tool::require_str(args, "eli")?;
     Eli::new(raw).map_err(|e| ToolError::InvalidArguments(e.to_string()))
 }
 
 /// Optionales Argument `lang` lesen (Default Deutsch).
 fn arg_lang(args: &Value) -> Result<Language, ToolError> {
+    // 68 §F-16/F-22: falscher Typ fiel still auf Deutsch zurueck.
+    if let Some(v) = args.get("lang")
+        && !v.is_null()
+        && !v.is_string()
+    {
+        return Err(ToolError::InvalidArguments(format!(
+            "`lang` muss ein String (de|fr|it|en|rm) sein, nicht {}",
+            crate::tool::json_type_name(v)
+        )));
+    }
     match args.get("lang").and_then(Value::as_str) {
         None | Some("de") => Ok(Language::De),
         Some("fr") => Ok(Language::Fr),
@@ -143,10 +151,7 @@ fn arg_lang(args: &Value) -> Result<Language, ToolError> {
 /// Pflicht-Argument `eid` als nicht-leerer String lesen (Normalisierung
 /// übernimmt das Primitiv via `normalize_eid`).
 fn arg_eid(args: &Value) -> Result<String, ToolError> {
-    let raw = args
-        .get("eid")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::InvalidArguments("`eid` (string) fehlt".into()))?;
+    let raw = crate::tool::require_str(args, "eid")?;
     if raw.trim().is_empty() {
         return Err(ToolError::InvalidArguments(
             "`eid` darf nicht leer sein".into(),

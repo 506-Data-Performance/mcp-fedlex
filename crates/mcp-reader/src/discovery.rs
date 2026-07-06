@@ -81,6 +81,16 @@ where
 
 /// Optionales Argument `lang` lesen (Default Deutsch).
 fn arg_lang(args: &Value) -> Result<Language, ToolError> {
+    // 68 §F-16/F-22: falscher Typ fiel still auf Deutsch zurueck.
+    if let Some(v) = args.get("lang")
+        && !v.is_null()
+        && !v.is_string()
+    {
+        return Err(ToolError::InvalidArguments(format!(
+            "`lang` muss ein String (de|fr|it|en|rm) sein, nicht {}",
+            crate::tool::json_type_name(v)
+        )));
+    }
     match args.get("lang").and_then(Value::as_str) {
         None | Some("de") => Ok(Language::De),
         Some("fr") => Ok(Language::Fr),
@@ -93,12 +103,9 @@ fn arg_lang(args: &Value) -> Result<Language, ToolError> {
     }
 }
 
-/// Pflicht-Argument mit gegebenem Namen als String lesen.
-fn arg_str<'a>(args: &'a Value, name: &str) -> Result<&'a str, ToolError> {
-    args.get(name)
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::InvalidArguments(format!("`{name}` (string) fehlt")))
-}
+/// Pflicht-Argument mit gegebenem Namen als String lesen (68 §F-16:
+/// unterscheidet «fehlt» von «falscher Typ», zentral in [`crate::tool`]).
+use crate::tool::require_str as arg_str;
 
 /// Optionales `limit` lesen (Default 20, hart auf 50 gedeckelt — Discovery geht
 /// live gegen Fedlex, eine grosse Liste hilft dem Agenten ohnehin nicht).

@@ -135,6 +135,35 @@ impl ToolError {
     }
 }
 
+/// Pflicht-Argument als String lesen — unterscheidet «fehlt» von «falscher
+/// Typ» (68 §F-16): `eid: 21` wurde als «`eid` (string) fehlt» gemeldet; die
+/// Diagnose war faktisch falsch, das Feld war ja da. Zentral, damit alle
+/// Tool-Familien dieselbe Fehlerform sprechen.
+pub(crate) fn require_str<'a>(args: &'a Value, name: &str) -> Result<&'a str, ToolError> {
+    match args.get(name) {
+        None | Some(Value::Null) => Err(ToolError::InvalidArguments(format!(
+            "`{name}` (string) fehlt"
+        ))),
+        Some(Value::String(s)) => Ok(s),
+        Some(other) => Err(ToolError::InvalidArguments(format!(
+            "`{name}` muss ein String sein, nicht {}",
+            json_type_name(other)
+        ))),
+    }
+}
+
+/// Menschlicher Name eines JSON-Typs für Fehlermeldungen.
+pub(crate) fn json_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "Boolean",
+        Value::Number(_) => "Zahl",
+        Value::String(_) => "String",
+        Value::Array(_) => "Array",
+        Value::Object(_) => "Objekt",
+    }
+}
+
 /// Ein einzelnes MCP-Tool.
 ///
 /// `execute` MUSS ein [`Response<Value>`] liefern. Damit ist die Herkunft jeder
