@@ -94,7 +94,11 @@ pub fn val<'a>(binding: &'a Binding, var: &str) -> Option<&'a str> {
 #[derive(Debug, Clone)]
 pub struct MockSparqlClient {
     canned: SparqlResults,
-    last_query: Arc<Mutex<Option<String>>>,
+    /// Vorab eingereihte Antworten (FIFO); ist die Queue leer, antwortet
+    /// `canned`. Für Primitive, die mehrere Queries je Aufruf stellen
+    /// (z. B. `search_law` mit Kürzel-Vorabfrage).
+    queued: Arc<Mutex<std::collections::VecDeque<SparqlResults>>>,
+    queries: Arc<Mutex<Vec<String>>>,
 }
 
 impl MockSparqlClient {
@@ -102,7 +106,8 @@ impl MockSparqlClient {
     pub fn new(canned: SparqlResults) -> Self {
         Self {
             canned,
-            last_query: Arc::new(Mutex::new(None)),
+            queued: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            queries: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -111,16 +116,45 @@ impl MockSparqlClient {
         Self::new(SparqlResults::from_json(json).expect("valid fixture JSON"))
     }
 
+    /// Erzeugt einen Mock, der die Fixtures der Reihe nach liefert und
+    /// danach auf die letzte zurückfällt.
+    pub fn from_json_sequence(fixtures: &[&str]) -> Self {
+        assert!(!fixtures.is_empty(), "mindestens eine Fixture");
+        let mut parsed: std::collections::VecDeque<SparqlResults> = fixtures
+            .iter()
+            .map(|j| SparqlResults::from_json(j).expect("valid fixture JSON"))
+            .collect();
+        let canned = parsed.pop_back().expect("nicht leer");
+        let mock = Self::new(canned);
+        *mock.queued.lock().expect("lock not poisoned") = parsed;
+        mock
+    }
+
     /// Die zuletzt an [`query`](SparqlClient::query) übergebene SPARQL-Query.
     pub fn last_query(&self) -> Option<String> {
-        self.last_query.lock().expect("lock not poisoned").clone()
+        self.queries
+            .lock()
+            .expect("lock not poisoned")
+            .last()
+            .cloned()
+    }
+
+    /// Alle bisher gestellten Queries, in Reihenfolge.
+    pub fn queries(&self) -> Vec<String> {
+        self.queries.lock().expect("lock not poisoned").clone()
     }
 }
 
 #[async_trait]
 impl SparqlClient for MockSparqlClient {
     async fn query(&self, sparql: &str) -> Result<SparqlResults, JoluxError> {
-        *self.last_query.lock().expect("lock not poisoned") = Some(sparql.to_string());
+        self.queries
+            .lock()
+            .expect("lock not poisoned")
+            .push(sparql.to_string());
+        if let Some(next) = self.queued.lock().expect("lock not poisoned").pop_front() {
+            return Ok(next);
+        }
         Ok(self.canned.clone())
     }
 }

@@ -177,7 +177,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Sucht Bundeserlasse nach Titel/Stichwort (Discovery, JLX-RES-02). Treffer tragen in_force ZUM STICHTAG as_of (zum Stichtag geltendes Recht steht zuerst; fehlt in_force, mit check_in_force pruefen; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
+            "description": "Sucht Bundeserlasse nach Titel, Volksnamen oder amtlichem Kuerzel (Discovery, JLX-RES-02). Kuerzel wie OR, ZGB, DSG werden exakt ueber die amtliche Abkuerzung aufgeloest und stehen zuerst. Treffer tragen in_force ZUM STICHTAG as_of (zum Stichtag geltendes Recht je Gruppe zuerst; fehlt in_force, mit check_in_force pruefen; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
             "properties": {
                 "query": { "type": "string", "description": "Titel-Stichwort, z.B. Energiegesetz" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 },

@@ -18,6 +18,10 @@ pub struct LawHit {
     pub sr_number: Option<String>,
     /// Titel des Treffers.
     pub title: String,
+    /// Amtliche Abkürzung (`jolux:titleShort`, z. B. «OR», «DSG»), sofern
+    /// der Graph sie trägt (68 §F-4). Kürzel-Anfragen matchen exakt hierauf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abbreviation: Option<String>,
     /// Geltung **zum Stichtag `as_of`** (68 §F-3): primär aus den Datums-
     /// feldern (`entry <= as_of < min(noLonger, endApplicability)`, J3.2);
     /// fehlen sie, sagt der heutige `jolux:inForceStatus` nur für den
@@ -34,18 +38,51 @@ pub struct LawHit {
 // `eli/cc/2022/491`) tragen kein SR-Literal am Erlass — als Pflicht-Pattern
 // schloss es genau das geltende Recht von der Titelsuche aus (der Explorer-
 // Blocker: «Datenschutzgesetz» fand ausschliesslich aufgehobene Erlasse).
-const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?status ?entry ?noLonger ?endApp WHERE {
+// `titleAlternative` matcht zusätzlich Volksnamen wie «Arbeitsgesetz», die im
+// amtlichen Langtitel gar nicht vorkommen (68 §F-4); BOUND-Guard, damit die
+// OPTIONAL-Variable die Fehler-Semantik des FILTER nicht kippt.
+const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?noLonger ?endApp WHERE {
   ?ca a jolux:ConsolidationAbstract ;
       jolux:isRealizedBy ?expr .
   ?expr jolux:language <__LANGURI__> ;
         jolux:title ?title .
+  OPTIONAL { ?expr jolux:titleShort ?short }
+  OPTIONAL { ?expr jolux:titleAlternative ?alt }
   OPTIONAL { ?ca jolux:historicalLegalId ?sr }
   OPTIONAL { ?ca jolux:inForceStatus ?status }
   OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
   OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
   OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
-  FILTER(CONTAINS(LCASE(STR(?title)), LCASE("__QUERY__")))
+  FILTER(
+    CONTAINS(LCASE(STR(?title)), LCASE("__QUERY__")) ||
+    (BOUND(?alt) && CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY__")))
+  )
 } LIMIT __LIMIT__"#;
+
+// Exakte Kürzel-Auflösung über die amtliche Abkürzung (68 §F-4). Eigene,
+// billige Vorabfrage (~0.4 s live) statt OR im Haupt-FILTER: dort verdrängte
+// das Substring-Rauschen («OR» in «VerORdnung») den Kürzel-Treffer aus dem
+// LIMIT-Fenster — live fehlte das Obligationenrecht in 20 Zeilen Rauschen.
+const ABBREV_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?noLonger ?endApp WHERE {
+  ?ca a jolux:ConsolidationAbstract ;
+      jolux:isRealizedBy ?expr .
+  ?expr jolux:language <__LANGURI__> ;
+        jolux:title ?title ;
+        jolux:titleShort ?short .
+  OPTIONAL { ?ca jolux:historicalLegalId ?sr }
+  OPTIONAL { ?ca jolux:inForceStatus ?status }
+  OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
+  OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
+  OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
+  FILTER(LCASE(STR(?short)) = LCASE("__QUERY__"))
+} LIMIT __LIMIT__"#;
+
+/// Sieht die Anfrage wie eine amtliche Abkürzung aus («OR», «ZGB», «ArGV 1»)?
+/// Nur dann lohnt die Kürzel-Vorabfrage; lange Phrasen sind nie Kürzel.
+fn looks_like_abbreviation(query: &str) -> bool {
+    let t = query.trim();
+    !t.is_empty() && t.chars().count() <= 12 && t.split_whitespace().count() <= 2
+}
 
 /// Geltung eines Treffers **zum Stichtag** (68 §F-3, Doppel-Logik J3.2/J3.3).
 ///
@@ -87,9 +124,12 @@ pub(crate) fn in_force_at(
 ///
 /// **Discovery-Funktion ohne Provenance** — liefert Kandidaten, auf denen dann
 /// provenance-tragende Primitive (`get_law_metadata`, `get_article_text`)
-/// aufsetzen. Geltendes Recht steht zuerst (68 §C-5). Der Suchbegriff wird vor
-/// der Einbettung entschärft (Anführungszeichen/Backslash entfernt), damit er
-/// die Query nicht zerbricht (kein SPARQL-Injection).
+/// aufsetzen. Kürzel-Anfragen («OR», «ArG») lösen zuerst exakt über die
+/// amtliche Abkürzung auf (68 §F-4, eigene Vorabfrage); diese Treffer stehen
+/// vor den Titel-/Volksnamen-Treffern, innerhalb der Gruppen geltendes Recht
+/// zuerst (68 §C-5). Der Suchbegriff wird vor der Einbettung entschärft
+/// (Anführungszeichen/Backslash entfernt), damit er die Query nicht zerbricht
+/// (kein SPARQL-Injection).
 pub async fn search_law(
     client: &impl SparqlClient,
     query: &str,
@@ -98,6 +138,23 @@ pub async fn search_law(
     as_of: ValidAsOf,
 ) -> Result<Vec<LawHit>, JoluxError> {
     let safe = query.replace(['"', '\\'], " ");
+
+    // Gruppe 0: exakte Kürzel-Treffer (nur wenn die Anfrage wie ein Kürzel
+    // aussieht — lange Phrasen sparen sich die Vorabfrage und ihre Latenz).
+    let mut grouped: Vec<(u8, LawHit)> = Vec::new();
+    if looks_like_abbreviation(&safe) {
+        let sparql = format!(
+            "{PREFIXES}{}",
+            ABBREV_Q
+                .replace("__LANGURI__", lang.vocab_uri())
+                .replace("__QUERY__", safe.trim())
+                .replace("__LIMIT__", &limit.to_string())
+        );
+        let res = client.query(&sparql).await?;
+        collect_hits(&res, as_of, 0, &mut grouped);
+    }
+
+    // Gruppe 1: Substring auf Titel/Volksnamen.
     let sparql = format!(
         "{PREFIXES}{}",
         SEARCH_Q
@@ -106,7 +163,37 @@ pub async fn search_law(
             .replace("__LIMIT__", &limit.to_string())
     );
     let res = client.query(&sparql).await?;
-    let mut hits: Vec<LawHit> = Vec::new();
+    collect_hits(&res, as_of, 1, &mut grouped);
+
+    // Kürzel-Treffer zuerst; innerhalb der Gruppen geltendes Recht zuerst
+    // (68 §C-5: live stand das aufgehobene EnG 1998 VOR dem geltenden
+    // EnG 2016). Stabil — die Server-Reihenfolge bleibt sonst erhalten.
+    grouped.sort_by_key(|(group, h)| {
+        (
+            *group,
+            match h.in_force {
+                Some(true) => 0u8,
+                None => 1,
+                Some(false) => 2,
+            },
+        )
+    });
+    let mut hits: Vec<LawHit> = grouped.into_iter().map(|(_, h)| h).collect();
+    hits.truncate(limit as usize);
+    Ok(hits)
+}
+
+/// Sammelt Treffer eines Resultats in `out`, dedupliziert pro ELI
+/// (68 §F-19): Mehrfach-Bindings (z. B. mehrere Expressions) lieferten
+/// denselben Erlass wortgleich doppelt — DISTINCT griff nicht, weil sich
+/// Nebenvariablen unterscheiden. Die erste Zeile gewinnt (auch über
+/// Gruppen hinweg); fehlende sr_number/abbreviation werden nachgetragen.
+fn collect_hits(
+    res: &crate::SparqlResults,
+    as_of: ValidAsOf,
+    group: u8,
+    out: &mut Vec<(u8, LawHit)>,
+) {
     for b in res.bindings() {
         let Some(ca) = val(b, "ca") else { continue };
         let Some(title) = val(b, "title") else {
@@ -116,6 +203,7 @@ pub async fn search_law(
             eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
             sr_number: val(b, "sr").map(str::to_string),
             title: title.to_string(),
+            abbreviation: val(b, "short").map(str::to_string),
             in_force: in_force_at(
                 val(b, "status"),
                 val(b, "entry"),
@@ -124,29 +212,18 @@ pub async fn search_law(
                 as_of,
             ),
         };
-        // Dedup pro ELI (68 §F-19): Mehrfach-Bindings (z. B. mehrere
-        // Expressions) lieferten denselben Erlass wortgleich doppelt —
-        // DISTINCT griff nicht, weil sich Nebenvariablen unterscheiden.
-        // Erste Zeile gewinnt; fehlende sr_number wird nachgetragen.
-        match hits.iter_mut().find(|h| h.eli == hit.eli) {
-            Some(existing) => {
+        match out.iter_mut().find(|(_, h)| h.eli == hit.eli) {
+            Some((_, existing)) => {
                 if existing.sr_number.is_none() {
                     existing.sr_number = hit.sr_number;
                 }
+                if existing.abbreviation.is_none() {
+                    existing.abbreviation = hit.abbreviation;
+                }
             }
-            None => hits.push(hit),
+            None => out.push((group, hit)),
         }
     }
-    // 68 §C-5: Geltendes Recht zuerst. Live stand das aufgehobene EnG 1998
-    // VOR dem geltenden EnG 2016 (beide SR 730.0) — die klassische
-    // Agenten-Falsch-Wahl «erster Treffer = richtig». Aufgehobenes ans Ende,
-    // Unbekanntes in die Mitte (stabile Sortierung, Reihenfolge sonst erhalten).
-    hits.sort_by_key(|h| match h.in_force {
-        Some(true) => 0u8,
-        None => 1,
-        Some(false) => 2,
-    });
-    Ok(hits)
 }
 
 #[cfg(test)]
@@ -266,6 +343,59 @@ mod tests {
         .await
         .unwrap();
         assert!(hits.iter().all(|h| h.in_force.is_none()));
+    }
+
+    /// 68 §F-4 (Explorer-Falle): «OR» fand Rheinschiffe-Verordnungen
+    /// («VerORdnung» als Substring), das Obligationenrecht fehlte. Jetzt
+    /// löst die Kürzel-Vorabfrage exakt über titleShort auf und der Treffer
+    /// steht VOR dem Substring-Rauschen.
+    #[tokio::test]
+    async fn abbreviation_resolves_via_title_short_and_ranks_first() {
+        let abbrev = r#"{"head":{"vars":["ca","sr","title","short","status","entry"]},"results":{"bindings":[
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/27/317_321_377"},
+           "sr":{"type":"literal","value":"220"},
+           "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz betreffend die Ergaenzung des Schweizerischen Zivilgesetzbuches (Obligationenrecht)"},
+           "short":{"type":"literal","value":"OR"},
+           "entry":{"type":"literal","value":"1912-01-01"}}
+        ]}}"#;
+        let noise = r#"{"head":{"vars":["ca","sr","title","status","entry"]},"results":{"bindings":[
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1960/433_465_451"},
+           "sr":{"type":"literal","value":"747.224.231"},
+           "title":{"type":"literal","xml:lang":"de","value":"Verordnung ueber die Untersuchung der Rheinschiffe"},
+           "entry":{"type":"literal","value":"1960-05-15"}}
+        ]}}"#;
+        let client = MockSparqlClient::from_json_sequence(&[abbrev, noise]);
+        let hits = search_law(&client, "OR", Language::De, 10, today())
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].eli, "eli/cc/27/317_321_377");
+        assert_eq!(hits[0].abbreviation.as_deref(), Some("OR"));
+        assert_eq!(hits[1].eli, "eli/cc/1960/433_465_451");
+        // Zwei Queries: zuerst die exakte Kürzel-Auflösung, dann Substring.
+        let qs = client.queries();
+        assert_eq!(qs.len(), 2);
+        assert!(qs[0].contains("jolux:titleShort ?short ."));
+        assert!(qs[0].contains(r#"LCASE(STR(?short)) = LCASE("OR")"#));
+        assert!(qs[1].contains("CONTAINS(LCASE(STR(?title))"));
+    }
+
+    /// Lange Phrasen sind nie Kürzel — keine Vorabfrage, keine Extra-Latenz.
+    #[tokio::test]
+    async fn long_phrase_skips_abbreviation_query() {
+        let client = MockSparqlClient::from_json(FIXTURE);
+        let _ = search_law(
+            &client,
+            "Bundesgesetz über den Datenschutz",
+            Language::De,
+            10,
+            today(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(client.queries().len(), 1);
+        // Volksnamen matchen zusätzlich über titleAlternative.
+        assert!(client.queries()[0].contains("jolux:titleAlternative ?alt"));
     }
 
     /// 68 §F-1 (Explorer-Blocker): Neue Konsolidierungen ohne SR-Literal
