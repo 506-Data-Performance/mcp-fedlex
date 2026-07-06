@@ -146,6 +146,13 @@ pub struct InForce {
     pub date_no_longer_in_force: Option<String>,
     /// Ende der Anwendbarkeit (Sonderfälle, 4 %).
     pub date_end_applicability: Option<String>,
+    /// 68 §F-29: `true`, wenn der Stichtag NACH dem heutigen Schweizer
+    /// Kalendertag liegt — die Aussage ist dann eine Projektion des heutigen
+    /// Graphen (kuenftige Inkrafttretens-Daten sind bekannt, kuenftige
+    /// Aufhebungen nicht zwingend), kein beglaubigter Zustand. Vorher wurde
+    /// as_of=2999-12-31 kommentarlos als kind=norm beantwortet.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub future_as_of: bool,
 }
 
 const IN_FORCE_Q: &str = r#"SELECT ?status ?statusLabel ?entry ?noLonger ?endApp WHERE {
@@ -157,6 +164,11 @@ const IN_FORCE_Q: &str = r#"SELECT ?status ?statusLabel ?entry ?noLonger ?endApp
 } LIMIT 1"#;
 
 /// JLX-TMP-03: Prüft, ob ein Erlass zum Stichtag gilt.
+///
+/// Zukunfts-Stichtage (68 §F-29): ein `as_of` nach dem heutigen Schweizer
+/// Kalendertag wird beantwortet (Inkrafttretens-Daten koennen in der Zukunft
+/// liegen), aber `future_as_of: true` kennzeichnet, dass die Aussage eine
+/// Projektion des heutigen Graphen ist — kein beglaubigter Zustand.
 ///
 /// Das Status-Feld allein genügt **nicht** — 15.1 % der CAs haben keinen
 /// `inForceStatus`, 10'479 davon aber ein `dateEntryInForce` (J3.3). Deshalb
@@ -202,6 +214,7 @@ pub async fn check_in_force(
 
     let data = InForce {
         in_force,
+        future_as_of: as_of.date() > fedlex_core::swiss_today(),
         current_status_uri,
         current_status_label,
         date_entry_in_force: entry,

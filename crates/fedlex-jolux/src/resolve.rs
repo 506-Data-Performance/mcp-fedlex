@@ -17,6 +17,11 @@ pub struct SrHit {
     /// Achtung: der Status beschreibt IMMER die heutige Geltung, nicht die
     /// zum Stichtag — dafür ist `in_force` da.
     pub in_force_status: Option<String>,
+    /// Deutsches Label zum Status (z. B. «In Kraft»), direkt gejoint
+    /// (68 §F-27 — check_in_force liefert dasselbe als current_status_label;
+    /// eine nackte Vokabular-URI musste vorher separat aufgelöst werden).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_force_status_label: Option<String>,
     /// Abgeleitete Geltung **zum Stichtag `as_of`** (68 §C-5/F-3): das
     /// Disambiguierungs-Kriterium bei wiederverwendeten SR-Nummern, direkt
     /// als Flag statt als zu deutende URI. Ohne Datumsfelder am Erlass nur
@@ -31,7 +36,7 @@ pub struct SrHit {
 // (`skos:notation`, typisiert als `notation-type/id-systematique`) auffindbar.
 // Ohne den zweiten Pfad landete "SR 235.1" ausschliesslich auf dem
 // aufgehobenen DSG von 1992 — ohne Zeiger auf das geltende Recht.
-const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status ?entry ?noLonger ?endApp WHERE {
+const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status ?statusLabel ?entry ?noLonger ?endApp WHERE {
   { ?ca a jolux:ConsolidationAbstract ;
         jolux:historicalLegalId "__SR__" . }
   UNION
@@ -42,7 +47,8 @@ const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status ?entry ?noLonger ?endAp
     ?ca jolux:isRealizedBy ?expr .
     ?expr jolux:language <__LANGURI__> ; jolux:title ?title .
   }
-  OPTIONAL { ?ca jolux:inForceStatus ?status }
+  OPTIONAL { ?ca jolux:inForceStatus ?status
+    OPTIONAL { ?status skos:prefLabel ?statusLabel . FILTER(LANG(?statusLabel) = "de") } }
   OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
   OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
   OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
@@ -90,6 +96,9 @@ pub async fn resolve_sr_number(
                     as_of,
                 ),
                 in_force_status: val(b, "status").map(str::to_string),
+                in_force_status_label: val(b, "statusLabel")
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string),
             })
         })
         .collect();

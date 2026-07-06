@@ -275,10 +275,10 @@ C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
 | F-22 | Schönheit | 38 Parameter ohne description; get_references.limit bricht 20/50-Muster; Enum-Validierung uneinheitlich (depth fällt still auf Default) | Schema-Inspektion | 🔴 |
 | F-23 | Schönheit | Keine Protokollversions-Verhandlung: jede angefragte Version → 2025-11-25 | `initialize {"protocolVersion":"1999-01-01"}` | 🔴 |
 | F-24 | Schönheit | Auth-Fehler-HTTP-Status divergiert je Transportpfad (rpc 200 in-band, mcp 401+WWW-Authenticate) | `tools/list` ohne Token auf beiden Pfaden | 🔴 |
-| F-26 | Schönheit | Fehler-Hint bei SR-Nummer-als-eli generisch statt resolve_sr_number zu nennen | `read_article {"eli":"151.1",…}` | 🔴 |
-| F-27 | Schönheit | in_force_status als nackte Vokabular-URI in resolve_sr_number (check_in_force hat current_status_label) | `resolve_sr_number {"sr_number":"235.1"}` | 🔴 |
+| F-26 | Schönheit | Fehler-Hint bei SR-Nummer-als-eli generisch statt resolve_sr_number zu nennen | `read_article {"eli":"151.1",…}` | 🟢 eigener Hint fuer «expected prefix eli/»: nennt resolve_sr_number und den URL-Strip |
+| F-27 | Schönheit | in_force_status als nackte Vokabular-URI in resolve_sr_number (check_in_force hat current_status_label) | `resolve_sr_number {"sr_number":"235.1"}` | 🟢 in_force_status_label direkt gejoint (wie current_status_label in check_in_force) |
 | F-28 | Schönheit | Zwei dokumentierte eid-Normalformen (read_element vs. get_article_history) | Schema-Vergleich | 🔴 |
-| F-29 | Schönheit | Absurde Zukunfts-Stichtage (2999) kommentarlos als kind=norm beglaubigt | `check_in_force {…,"as_of":"2999-12-31"}` | 🔴 |
+| F-29 | Schönheit | Absurde Zukunfts-Stichtage (2999) kommentarlos als kind=norm beglaubigt | `check_in_force {…,"as_of":"2999-12-31"}` | 🟢 check_in_force kennzeichnet Zukunfts-Stichtage mit future_as_of: true (Projektion, kein beglaubigter Zustand) |
 | F-32 | Schönheit | Verbrückung einseitig: kein Reader-Hinweis auf die semantische Alternative bei 0 Treffern | `search_law` mit Laienfrage | 🟡 Reader-Haelfte erledigt: 0-Treffer-hint verweist auf semantic_search; semantic-Seite (Partner-Name) offen |
 | F-33 | Schönheit | get_citations englisch ohne lang-Param; Caveat «leere Liste ≠ nie geändert» fehlt in leerer Antwort; JLX-/AKN-Codes unerklärt | diverse | 🔴 |
 | F-34 | Schönheit | search_law p50 ≈ 800 ms — langsamstes Tool ausgerechnet in der Recovery-Schleife | Latenz-Logs | 🔴 |

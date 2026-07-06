@@ -119,6 +119,12 @@ impl ToolError {
     /// kostete den Agenten einen Rateversuch mehr als nötig.
     pub fn hint(&self) -> &'static str {
         match self {
+            // 68 §F-26: «151.1» als eli ist fast immer eine SR-Nummer — der
+            // generische Schema-Hinweis kostete einen Rateversuch mehr als
+            // noetig; das passende Recovery-Tool ist bekannt.
+            ToolError::InvalidArguments(what) if what.contains("expected prefix `eli/`") => {
+                "Das sieht nach einer SR-Nummer oder URL aus, nicht nach einem ELI. Loese SR-Nummern mit resolve_sr_number auf; aus vollen fedlex-URLs nimm den Teil ab `eli/`."
+            }
             ToolError::InvalidArguments(_) => {
                 "Pruefe die Argumente gegen das inputSchema des Tools und versuche es erneut."
             }
