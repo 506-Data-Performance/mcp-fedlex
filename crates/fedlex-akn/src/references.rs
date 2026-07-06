@@ -76,6 +76,14 @@ pub struct ParsedRef {
     /// `read_element`. Kandidat, kein Beleg.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eid_candidate: Option<String>,
+    /// Feinreferenz unterhalb des Absatzes (Verify-V11): `lit.`/`Bst.` und
+    /// `Ziff.` wurden vorher stillschweigend verworfen — «Art. 3 lit. b
+    /// Ziff. 2» verlor die Haelfte des Verweises. Roh erhalten (z. B.
+    /// «lit. b Ziff. 2»); NICHT im eid_candidate, weil AKN-Items tiefer
+    /// nisten (`…/list_1/item_b`) und nicht ratbar sind — search_text
+    /// findet die Stelle im Artikel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_reference: Option<String>,
 }
 
 impl ParsedRef {
@@ -88,6 +96,7 @@ impl ParsedRef {
             paragraph: None,
             act_abbreviation: None,
             eid_candidate: None,
+            sub_reference: None,
         }
     }
 }
@@ -133,6 +142,20 @@ fn parse_article_ref(value: String) -> ParsedRef {
             t.chars().next().is_some_and(char::is_uppercase) && t.chars().all(char::is_alphanumeric)
         });
 
+    // Verify-V11: lit./Bst./Ziff. einsammeln statt verwerfen.
+    let mut sub_parts: Vec<String> = Vec::new();
+    for (i, tok) in tokens.iter().enumerate() {
+        if matches!(*tok, "lit." | "Bst." | "Buchstabe" | "Ziff." | "Ziffer")
+            && let Some(next) = tokens.get(i + 1)
+        {
+            let n = strip(next);
+            if !n.is_empty() {
+                sub_parts.push(format!("{tok} {n}"));
+            }
+        }
+    }
+    let sub_reference = (!sub_parts.is_empty()).then(|| sub_parts.join(" "));
+
     let eid_candidate = article.as_ref().map(|a| {
         let base = format!("art_{}", a.to_lowercase());
         match &paragraph {
@@ -148,6 +171,7 @@ fn parse_article_ref(value: String) -> ParsedRef {
         paragraph,
         act_abbreviation,
         eid_candidate,
+        sub_reference,
     }
 }
 
@@ -207,6 +231,21 @@ mod tests {
         assert!(item_ref.href.is_none());
     }
 
+    /// Verify-V11: «Art. 3 lit. b Ziff. 2» verlor lit./Ziff. stillschweigend —
+    /// die Feinreferenz bleibt jetzt als sub_reference erhalten (roh, nicht
+    /// im eid_candidate: AKN-Items nisten unratbar tief).
+    #[test]
+    fn keeps_lit_and_ziff_as_sub_reference() {
+        let r = parse_unlinked_ref("Art. 3 Abs. 1 lit. b Ziff. 2 ArG");
+        assert_eq!(r.article.as_deref(), Some("3"));
+        assert_eq!(r.paragraph.as_deref(), Some("1"));
+        assert_eq!(r.sub_reference.as_deref(), Some("lit. b Ziff. 2"));
+        assert_eq!(r.act_abbreviation.as_deref(), Some("ArG"));
+        assert_eq!(r.eid_candidate.as_deref(), Some("art_3/para_1"));
+        // Ohne Feinreferenz bleibt das Feld weg.
+        assert_eq!(parse_unlinked_ref("Art. 9a").sub_reference, None);
+    }
+
     #[test]
     fn parses_unlinked_labels() {
         assert_eq!(
@@ -216,6 +255,7 @@ mod tests {
                 value: "9a".into(),
                 article: Some("9a".into()),
                 paragraph: None,
+                sub_reference: None,
                 act_abbreviation: None,
                 eid_candidate: Some("art_9a".into()),
             }

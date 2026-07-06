@@ -311,10 +311,23 @@ where
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let eli = arg_eli(&args)?;
         let lang = arg_lang(&args)?;
-        let resp =
-            resolve_consolidation_at(self.client.as_ref(), &eli, ctx.stamp.valid_as_of(), lang)
-                .await
-                .map_err(map_jolux)?;
+        let as_of = ctx.stamp.valid_as_of();
+        let resp = resolve_consolidation_at(self.client.as_ref(), &eli, as_of, lang)
+            .await
+            .map_err(|err| match err {
+                // Verify-V20: das nackte «not found: <uri>» wurde wie bei F-2
+                // als «Erlass existiert nicht» gelesen — real fehlt nur die
+                // Konsolidierung zum Stichtag (XML erst ab ~2021) oder die
+                // Sprachfassung. Gleiche Fehlerform wie read_article; der
+                // XML-Fassung-Hint (tool.rs) nennt die Prüfwege.
+                JoluxError::NotFound(_) => ToolError::NotFound(format!(
+                    "keine konsolidierte XML-Fassung fuer `{}` zum Stichtag {} in Sprache `{}`",
+                    eli.as_str(),
+                    as_of,
+                    lang.tag()
+                )),
+                other => map_jolux(other),
+            })?;
         into_value_response(resp)
     }
 }
