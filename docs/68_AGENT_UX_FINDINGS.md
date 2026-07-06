@@ -241,3 +241,44 @@ platziertes `as_of` in `arguments` wird kommentarlos ignoriert.
 ADR-011) — dann **C-3/C-4** (Datenqualität der neuen Tranche, SPARQL-seitig) — dann
 **B-1/B-2** als gemeinsame Listen-/Budget-Konvention (löst 67 P-5 mit ab) — dann
 C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
+
+---
+
+## F — MCP-Explorer-Lauf 2026-07-06 (unvoreingenommene 3-Phasen-Evaluation)
+
+> **Quelle:** Explorativer Benchmark `benchmarks/mcp-explorer` (Repo mindful.bio),
+> Lauf `runs/2026-07-06/` — vier frische Phase-1-Explorer, je ein frischer Phase-2-
+> (Zusammenspiel mit mcp-fedlex-semantic) und Phase-3-Agent (Ketten), 296 protokollierte
+> Aufrufe, Navigator-JWT gegen mcp-fedlex.ch. Vollständiger Bericht inkl. Log-Referenzen
+> (`log:<server>:<n>` → `calls-*.jsonl`): `runs/2026-07-06/REPORT.md`; Scorecards,
+> Positivbefunde und Messwerte dort. Hier nur die Reader-seitigen Findings; die
+> semantic-seitigen (F7, F8, F14, F15, F17, F20, F25, F30, F31) leben im Register des
+> mcp-fedlex-semantic-Repos. Nummerierung folgt dem Berichts-Kapitel 6.
+
+| Nr | Grad | Finding (ein Satz) | Repro | Status |
+|---|---|---|---|---|
+| F-1 | Blocker | search_law findet das geltende DSG (eli/cc/2022/491) unter keinem Titel-Stichwort — alle Treffer aufgehoben, entgegen «geltendes Recht steht zuerst» | `search_law {"query":"Datenschutzgesetz"}` | 🔴 |
+| F-2 | Reibung | Textzugriff auf aufgehobenes aDSG scheitert als «Ressource existiert nicht» + zirkulärer Hint, obwohl list_versions/explore_node die Konsolidierung belegen | `read_article {"eli":"eli/cc/1993/1945_1945_1945","eid":"art_8","as_of":"2014-01-01"}` | 🔴 |
+| F-3 | Reibung | `in_force`/`in_force_status` in search_law-/resolve_sr_number-Treffern ignoriert `as_of` und widerspricht check_in_force — Disambiguierung wählt am Stichtag das falsche Gesetz | `resolve_sr_number {"sr_number":"235.1","as_of":"2020-06-01"}` | 🔴 |
+| F-4 | Reibung | search_law ist Substring-/Phrasensuche: «OR»→Rheinschiffe, «ArG»→Argentinien, obwohl parse_unlinked_ref Kürzel explizit dorthin verweist | `search_law {"query":"OR","limit":5}` | 🔴 |
+| F-5 | Reibung | Leere Trefferlisten ohne Reformulierungs-/Umleitungs-Hinweis; keine Umlaut-Normalisierung («ueber» 0 vs. «über» 1 Treffer) | `search_law {"query":"Bundesgesetz ueber den Datenschutz"}` | 🔴 |
+| F-6 | Reibung | Default-Stichtag ist der Boot-Tag des Pods statt «heute» (real: Vortag), divergent zum semantic-Server, entgegen instructions | Aufruf ohne `as_of`, provenance.valid_as_of prüfen | 🟡 |
+| F-9 | Reibung | search_law: eponymes Gesetz fehlt in Top-N (GlG), truncated=true ohne offset-Parameter — Rest unerreichbar | `search_law {"query":"Gleichstellung","limit":8}` | 🔴 |
+| F-10 | Reibung | get_law_metadata liefert für valide, nicht existierende ELIs ein Null-Objekt mit kind=norm statt Fehler | `get_law_metadata {"eli":"eli/cc/9999/99999"}` | 🔴 |
+| F-11 | Reibung | get_law_metadata: sr_number=null (obwohl via SR gefunden), Abkürzung/Status fehlen | `get_law_metadata {"eli":"eli/cc/2022/491"}` | 🔴 |
+| F-12 | Reibung | URI-Roundtrip bricht: Tools emittieren https-URIs, eli-Params verlangen `eli/`-Kurzform; ungesplittete chunk_ids ohne Split-Hinweis | `read_article {"eli":"https://fedlex.data.admin.ch/eli/cc/2022/491",…}` | 🔴 |
+| F-13 | Reibung | Fehlende Sprachfassung (rm) als «Ressource existiert nicht» fehlattributiert; Hint ohne lang/list_expressions | `read_article {…,"lang":"rm"}` | 🔴 |
+| F-16 | Reibung | Typfehler als «fehlt» gemeldet («'eid' (string) fehlt» bei eid:21) | `read_article {…,"eid":21}` | 🔴 |
+| F-18 | Reibung | Unbekannte scheme_id → stillschweigend leere Liste (isError:false) statt {error, hint}; Schemes nicht enumerierbar | `list_vocabulary {"scheme_id":"bogus"}` | 🔴 |
+| F-19 | Reibung | Trefferliste: dieselbe ELI doppelt mit widersprüchlichem in_force; Entwürfe ohne in_force-Feld untergemischt | `search_law {"query":"Covid-19","as_of":"2021-02-01"}` | 🔴 |
+| F-21 | Schönheit | tools/list 91 KB, ~25 % byte-identisches Duplikat (Legacy-`schema`-Doppel-Emit) | `tools/list` | 🔴 |
+| F-22 | Schönheit | 38 Parameter ohne description; get_references.limit bricht 20/50-Muster; Enum-Validierung uneinheitlich (depth fällt still auf Default) | Schema-Inspektion | 🔴 |
+| F-23 | Schönheit | Keine Protokollversions-Verhandlung: jede angefragte Version → 2025-11-25 | `initialize {"protocolVersion":"1999-01-01"}` | 🔴 |
+| F-24 | Schönheit | Auth-Fehler-HTTP-Status divergiert je Transportpfad (rpc 200 in-band, mcp 401+WWW-Authenticate) | `tools/list` ohne Token auf beiden Pfaden | 🔴 |
+| F-26 | Schönheit | Fehler-Hint bei SR-Nummer-als-eli generisch statt resolve_sr_number zu nennen | `read_article {"eli":"151.1",…}` | 🔴 |
+| F-27 | Schönheit | in_force_status als nackte Vokabular-URI in resolve_sr_number (check_in_force hat current_status_label) | `resolve_sr_number {"sr_number":"235.1"}` | 🔴 |
+| F-28 | Schönheit | Zwei dokumentierte eid-Normalformen (read_element vs. get_article_history) | Schema-Vergleich | 🔴 |
+| F-29 | Schönheit | Absurde Zukunfts-Stichtage (2999) kommentarlos als kind=norm beglaubigt | `check_in_force {…,"as_of":"2999-12-31"}` | 🔴 |
+| F-32 | Schönheit | Verbrückung einseitig: kein Reader-Hinweis auf die semantische Alternative bei 0 Treffern | `search_law` mit Laienfrage | 🔴 |
+| F-33 | Schönheit | get_citations englisch ohne lang-Param; Caveat «leere Liste ≠ nie geändert» fehlt in leerer Antwort; JLX-/AKN-Codes unerklärt | diverse | 🔴 |
+| F-34 | Schönheit | search_law p50 ≈ 800 ms — langsamstes Tool ausgerechnet in der Recovery-Schleife | Latenz-Logs | 🔴 |
