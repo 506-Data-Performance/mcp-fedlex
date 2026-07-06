@@ -518,6 +518,23 @@ where
 }
 
 /// JLX-VOC-02. Konzepte eines kontrollierten Vokabulars listen.
+/// Bekannte Scheme-Kennungen (68 §C-2/F-18): EINE Quelle für den
+/// Schema-Text und den Fehlerhinweis, damit beide nicht driften.
+const KNOWN_SCHEMES: &[&str] = &[
+    "country",
+    "legal-taxonomy",
+    "enforcement-status",
+    "impact-type",
+    "resource-type",
+    "legal-resource-genre",
+    "treaty-type",
+    "treaty-status",
+    "consultation-status",
+    "subdivision-type",
+    "draft-document-type",
+    "legal-subject-theme-de",
+];
+
 struct ListVocabulary<C> {
     client: Arc<C>,
 }
@@ -538,7 +555,7 @@ where
             "type": "object",
             "description": "Listet Konzepte eines kontrollierten Vokabulars (SKOS-Schema, JLX-VOC-02). Mit query gezielt nach Label suchen (z.B. scheme_id=country, query=Deutschland → Land-URI fuer find_treaties). Nachschlagewerk als HINWEIS (kind=hint).",
             "properties": {
-                "scheme_id": { "type": "string", "description": "Schema-Kennung, u.a.: country, legal-taxonomy, enforcement-status, impact-type, resource-type, legal-resource-genre, treaty-type, treaty-status, consultation-status, subdivision-type, draft-document-type, legal-subject-theme-de" },
+                "scheme_id": { "type": "string", "description": format!("Schema-Kennung, bekannt sind: {}", KNOWN_SCHEMES.join(", ")) },
                 "query": { "type": "string", "description": "Optionaler Label-Filter, case-insensitiv ueber alle Sprachen (serverseitig)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 }
@@ -554,6 +571,16 @@ where
         let concepts = list_vocabulary(self.client.as_ref(), scheme, lang, limit, query)
             .await
             .map_err(map_jolux)?;
+        // 68 §F-18: Ein unbekanntes Schema lieferte stillschweigend eine
+        // leere Liste (isError:false) — Tippfehler waren von «keine Treffer»
+        // nicht unterscheidbar. Ohne query-Filter hat jedes echte Schema
+        // Konzepte; leer heisst also: Schema existiert nicht.
+        if concepts.is_empty() && query.is_none() {
+            return Err(ToolError::NotFound(format!(
+                "Vokabular-Schema `{scheme}` ist unbekannt. Bekannte Schemes: {}",
+                KNOWN_SCHEMES.join(", ")
+            )));
+        }
         let items: Vec<Value> = concepts
             .into_iter()
             .filter_map(|c| to_value(c).ok())
@@ -860,13 +887,34 @@ mod tests {
         assert!(result["hint"].is_string(), "{result}");
     }
 
+    /// 68 §F-18 (invertiert das fruehere Verhalten): ein Schema ohne ein
+    /// einziges Konzept existiert nicht — die stille leere Liste machte
+    /// Tippfehler von «keine Treffer» ununterscheidbar. Der Fehler zaehlt
+    /// die bekannten Schemes auf.
     #[tokio::test]
-    async fn list_vocabulary_empty_is_list_with_hint() {
+    async fn list_vocabulary_unknown_scheme_errors_with_choices() {
         let result = registry_with(EMPTY_JSON)
             .dispatch(
                 &ctx(Role::Navigator),
                 "list_vocabulary",
-                json!({ "scheme_id": "legal-taxonomy" }),
+                json!({ "scheme_id": "bogus-scheme" }),
+            )
+            .await;
+        let err = result["error"].as_str().expect("error erwartet");
+        assert!(err.contains("`bogus-scheme`"), "{result}");
+        assert!(err.contains("country"), "{result}");
+        assert!(result["hint"].is_string(), "{result}");
+    }
+
+    /// Mit query-Filter bleibt eine leere Liste ein legitimes «kein Treffer»
+    /// (B-2-Konvention) — nur das filterlose Leer-Ergebnis ist ein Fehler.
+    #[tokio::test]
+    async fn list_vocabulary_empty_with_query_stays_list() {
+        let result = registry_with(EMPTY_JSON)
+            .dispatch(
+                &ctx(Role::Navigator),
+                "list_vocabulary",
+                json!({ "scheme_id": "country", "query": "Atlantis" }),
             )
             .await;
         assert_eq!(result["provenance"]["kind"], "hint", "{result}");

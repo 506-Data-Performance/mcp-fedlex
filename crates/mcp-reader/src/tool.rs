@@ -131,6 +131,11 @@ impl ToolError {
             ToolError::NotFound(what) if what.contains("XML-Fassung") => {
                 "Der Erlass kann existieren, auch wenn diese Fassung fehlt: (1) aeltere Fassungen (vor ~2021) liegen oft nur als PDF vor — pruefe die vorhandenen Konsolidierungen mit list_versions; (2) fehlt nur die Sprachfassung, zeigt list_expressions die verfuegbaren Sprachen; (3) ist der ELI unsicher, nutze search_law oder resolve_sr_number."
             }
+            // 68 §F-18: Tippfehler im Schema-Namen sollen zur Auswahl
+            // fuehren, nicht in den generischen ELI-Hinweis.
+            ToolError::NotFound(what) if what.contains("Vokabular-Schema") => {
+                "Waehle eine der in der Fehlermeldung genannten Scheme-Kennungen; innerhalb eines Schemas filterst du Konzepte mit dem query-Parameter."
+            }
             ToolError::NotFound(_) => {
                 "Die Ressource existiert nicht. Pruefe ELI und Stichtag (as_of) oder finde den Erlass mit search_law bzw. resolve_sr_number."
             }
