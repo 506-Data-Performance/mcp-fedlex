@@ -469,6 +469,28 @@ impl<A: AuthResolver, B: QuotaBackend> McpService<A, B> {
                 // graceful `{ error, hint }` im `result`, formgleich zu
                 // Dispatch (ADR-006) und Quota-Pfad — nicht als
                 // Protocol-Error `-32602`.
+                // Verify-V7: `as_of` mit falschem Typ (Zahl 2020 statt
+                // "2020-01-01") fiel still auf «heute» — die Stichtags-
+                // Recherche lief unbemerkt auf der Gegenwart. Bei einem
+                // Stichtags-Produkt ist das die gefaehrlichste Koersion:
+                // falscher Typ wird jetzt wie ein ungueltiges Datum behandelt.
+                for source in [req.params.get("as_of"), args.get("as_of")] {
+                    if let Some(v) = source
+                        && !v.is_null()
+                        && !v.is_string()
+                    {
+                        return JsonRpcResponse::ok(
+                            req.response_id(),
+                            crate::registry::call_tool_result(
+                                json!({
+                                    "error": "as_of must be a string (YYYY-MM-DD)",
+                                    "hint": "Stichtag als String im Format JJJJ-MM-TT angeben, z. B. \"2024-01-01\" — Zahlen oder andere Typen werden nicht als Datum gelesen.",
+                                }),
+                                true,
+                            ),
+                        );
+                    }
+                }
                 let as_of_requested = req
                     .params
                     .get("as_of")
@@ -1236,6 +1258,35 @@ mod tests {
                 .unwrap()
                 .contains("as_of must be an ISO date"),
             "in-band error muss den as_of-Hinweis tragen: {result}"
+        );
+    }
+
+    /// Verify-V7: `as_of: 2020` (Zahl) fiel still auf «heute» — die
+    /// Stichtags-Recherche lief unbemerkt auf der Gegenwart. Jetzt in-band
+    /// Typfehler statt stiller Koersion.
+    #[tokio::test]
+    async fn wrong_typed_as_of_errors_instead_of_silent_today() {
+        let svc = service(MockBackend::allowing());
+        let resp = svc
+            .handle(
+                Some("token-a"),
+                req(
+                    1,
+                    "tools/call",
+                    json!({ "name": "read_article", "arguments": { "as_of": 2020 } }),
+                ),
+                0,
+            )
+            .await;
+        assert!(resp.error.is_none(), "kein JSON-RPC-Protocol-Error");
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], true, "{result}");
+        assert!(
+            result["structuredContent"]["error"]
+                .as_str()
+                .unwrap()
+                .contains("as_of must be a string"),
+            "{result}"
         );
     }
 
