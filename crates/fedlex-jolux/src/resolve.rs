@@ -14,10 +14,13 @@ pub struct SrHit {
     /// Titel in der angefragten Sprache, sofern vorhanden.
     pub title: Option<String>,
     /// `jolux:inForceStatus` (opake Vokabular-URI), sofern vorhanden.
+    /// Achtung: der Status beschreibt IMMER die heutige Geltung, nicht die
+    /// zum Stichtag — dafür ist `in_force` da.
     pub in_force_status: Option<String>,
-    /// Abgeleitete Geltung (68 §C-5): `Some(true)` = in Kraft — das
+    /// Abgeleitete Geltung **zum Stichtag `as_of`** (68 §C-5/F-3): das
     /// Disambiguierungs-Kriterium bei wiederverwendeten SR-Nummern, direkt
-    /// als Flag statt als zu deutende URI.
+    /// als Flag statt als zu deutende URI. Ohne Datumsfelder am Erlass nur
+    /// für den heutigen Stichtag ableitbar, sonst `None` (nie geraten).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_force: Option<bool>,
 }
@@ -28,7 +31,7 @@ pub struct SrHit {
 // (`skos:notation`, typisiert als `notation-type/id-systematique`) auffindbar.
 // Ohne den zweiten Pfad landete "SR 235.1" ausschliesslich auf dem
 // aufgehobenen DSG von 1992 — ohne Zeiger auf das geltende Recht.
-const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status WHERE {
+const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status ?entry ?noLonger ?endApp WHERE {
   { ?ca a jolux:ConsolidationAbstract ;
         jolux:historicalLegalId "__SR__" . }
   UNION
@@ -40,6 +43,9 @@ const SR_Q: &str = r#"SELECT DISTINCT ?ca ?title ?status WHERE {
     ?expr jolux:language <__LANGURI__> ; jolux:title ?title .
   }
   OPTIONAL { ?ca jolux:inForceStatus ?status }
+  OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
+  OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
+  OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
 } LIMIT 20"#;
 
 /// JLX-RES-01: Löst eine SR-Nummer zu den passenden Erlassen auf.
@@ -59,6 +65,7 @@ pub async fn resolve_sr_number(
     client: &impl SparqlClient,
     sr_number: &str,
     lang: Language,
+    as_of: ValidAsOf,
 ) -> Result<Vec<SrHit>, JoluxError> {
     let safe = sr_number.replace(['"', '\\'], " ");
     let sparql = format!(
@@ -75,7 +82,13 @@ pub async fn resolve_sr_number(
             Some(SrHit {
                 eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
                 title: val(b, "title").map(str::to_string),
-                in_force: crate::search::derive_in_force(val(b, "status")),
+                in_force: crate::search::in_force_at(
+                    val(b, "status"),
+                    val(b, "entry"),
+                    val(b, "noLonger"),
+                    val(b, "endApp"),
+                    as_of,
+                ),
                 in_force_status: val(b, "status").map(str::to_string),
             })
         })
@@ -208,6 +221,7 @@ pub async fn list_expressions(
 mod tests {
     use super::*;
     use crate::client::MockSparqlClient;
+    use fedlex_core::swiss_today;
     use time::macros::date;
 
     #[tokio::test]
@@ -221,9 +235,14 @@ mod tests {
                "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"}}
             ]}}"#,
         );
-        let hits = resolve_sr_number(&client, "730.0", Language::De)
-            .await
-            .unwrap();
+        let hits = resolve_sr_number(
+            &client,
+            "730.0",
+            Language::De,
+            ValidAsOf::new(swiss_today()),
+        )
+        .await
+        .unwrap();
         assert_eq!(hits.len(), 2, "SR-Wiederverwendung: Liste, kein Einzelwert");
         // Geltendes Recht zuerst — der aufgehobene Alt-Erlass folgt dahinter.
         assert_eq!(hits[0].eli, "eli/cc/2017/762");
@@ -244,9 +263,14 @@ mod tests {
     async fn sr_number_neutralizes_injection() {
         let client =
             MockSparqlClient::from_json(r#"{"head":{"vars":["ca"]},"results":{"bindings":[]}}"#);
-        let _ = resolve_sr_number(&client, r#"730" } INJECT {"#, Language::De)
-            .await
-            .unwrap();
+        let _ = resolve_sr_number(
+            &client,
+            r#"730" } INJECT {"#,
+            Language::De,
+            ValidAsOf::new(swiss_today()),
+        )
+        .await
+        .unwrap();
         let q = client.last_query().unwrap();
         assert!(!q.contains("\" }"), "Breakout-Sequenz nicht neutralisiert");
     }

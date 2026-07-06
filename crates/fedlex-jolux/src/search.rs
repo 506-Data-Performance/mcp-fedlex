@@ -2,6 +2,7 @@
 
 use crate::client::{Language, PREFIXES, SparqlClient, val};
 use crate::{FEDLEX_BASE, error::JoluxError};
+use fedlex_core::{ValidAsOf, swiss_today};
 use serde::{Deserialize, Serialize};
 
 /// Ein Such-Treffer: ein Erlass, der zum Suchbegriff passt.
@@ -13,30 +14,60 @@ pub struct LawHit {
     pub sr_number: Option<String>,
     /// Titel des Treffers.
     pub title: String,
-    /// Geltung laut `jolux:inForceStatus` (68 §C-5): `Some(true)` = in Kraft,
-    /// `Some(false)` = nicht (mehr) in Kraft, `None` = kein Status im Graphen
-    /// (J3.3: 15 % der CAs) — dann [`check_in_force`] fragen, das über die
-    /// Datumsfelder entscheidet.
+    /// Geltung **zum Stichtag `as_of`** (68 §F-3): primär aus den Datums-
+    /// feldern (`entry <= as_of < min(noLonger, endApplicability)`, J3.2);
+    /// fehlen sie, sagt der heutige `jolux:inForceStatus` nur für den
+    /// heutigen Stichtag etwas aus — für andere Stichtage bleibt das Feld
+    /// ehrlich leer (`None`) statt heutigen Status als historischen
+    /// auszugeben. Dann [`check_in_force`] fragen.
     ///
     /// [`check_in_force`]: crate::temporal::check_in_force
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_force: Option<bool>,
 }
 
-const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?status WHERE {
+const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?status ?entry ?noLonger ?endApp WHERE {
   ?ca a jolux:ConsolidationAbstract ;
       jolux:historicalLegalId ?sr ;
       jolux:isRealizedBy ?expr .
   ?expr jolux:language <__LANGURI__> ;
         jolux:title ?title .
   OPTIONAL { ?ca jolux:inForceStatus ?status }
+  OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
+  OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
+  OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
   FILTER(CONTAINS(LCASE(STR(?title)), LCASE("__QUERY__")))
 } LIMIT __LIMIT__"#;
 
-/// Leitet aus der Status-URI die Geltung ab (`.../enforcement-status/0` = in
-/// Kraft). Kein Status → `None`, nie geraten.
-pub(crate) fn derive_in_force(status_uri: Option<&str>) -> Option<bool> {
-    status_uri.map(|s| s.ends_with("/0"))
+/// Geltung eines Treffers **zum Stichtag** (68 §F-3, Doppel-Logik J3.2/J3.3).
+///
+/// Primär entscheiden die Datumsfelder — sie gelten für jeden Stichtag.
+/// Fehlen sie, trägt der Graph nur den *heutigen* `inForceStatus`; der ist
+/// ausschliesslich für den heutigen Stichtag eine Aussage. Für historische
+/// Stichtage hiesse «Status heute in Kraft» eben nicht «galt damals» —
+/// exakt so wählte die dokumentierte Disambiguierung im Explorer-Lauf das
+/// am Stichtag noch nicht existierende DSG 2022. Dann lieber `None`.
+pub(crate) fn in_force_at(
+    status_uri: Option<&str>,
+    entry: Option<&str>,
+    no_longer: Option<&str>,
+    end_app: Option<&str>,
+    as_of: ValidAsOf,
+) -> Option<bool> {
+    if let Some(entry) = entry {
+        // ISO-Datums-Strings vergleichen lexikografisch korrekt.
+        let day = as_of.to_string();
+        let started = entry <= day.as_str();
+        let ended = [no_longer, end_app]
+            .into_iter()
+            .flatten()
+            .any(|d| d <= day.as_str());
+        Some(started && !ended)
+    } else if as_of.date() == swiss_today() {
+        status_uri.map(|s| s.ends_with("/0"))
+    } else {
+        None
+    }
 }
 
 /// Sucht Erlasse, deren Titel den Suchbegriff enthält (case-insensitive).
@@ -56,6 +87,7 @@ pub async fn search_law(
     query: &str,
     lang: Language,
     limit: u32,
+    as_of: ValidAsOf,
 ) -> Result<Vec<LawHit>, JoluxError> {
     let safe = query.replace(['"', '\\'], " ");
     let sparql = format!(
@@ -76,7 +108,13 @@ pub async fn search_law(
                 eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
                 sr_number: val(b, "sr").map(str::to_string),
                 title,
-                in_force: derive_in_force(val(b, "status")),
+                in_force: in_force_at(
+                    val(b, "status"),
+                    val(b, "entry"),
+                    val(b, "noLonger"),
+                    val(b, "endApp"),
+                    as_of,
+                ),
             })
         })
         .collect();
@@ -96,9 +134,15 @@ pub async fn search_law(
 mod tests {
     use super::*;
     use crate::client::MockSparqlClient;
+    use time::macros::date;
+
+    /// Heutiger Stichtag (Schweizer Zeit) — für Tests des Status-Fallbacks.
+    fn today() -> ValidAsOf {
+        ValidAsOf::new(swiss_today())
+    }
 
     const FIXTURE: &str = r#"{
-      "head": {"vars": ["ca","sr","title","status"]},
+      "head": {"vars": ["ca","sr","title","status","entry","noLonger","endApp"]},
       "results": {"bindings": [
         {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1999/27"},
          "sr":{"type":"literal","value":"730.0"},
@@ -117,7 +161,7 @@ mod tests {
     #[tokio::test]
     async fn hits_carry_in_force_and_current_law_sorts_first() {
         let client = MockSparqlClient::from_json(FIXTURE);
-        let hits = search_law(&client, "energie", Language::De, 10)
+        let hits = search_law(&client, "energie", Language::De, 10, today())
             .await
             .unwrap();
         assert_eq!(hits.len(), 2);
@@ -132,6 +176,7 @@ mod tests {
         let q = client.last_query().unwrap();
         assert!(q.contains("ConsolidationAbstract"));
         assert!(q.contains("jolux:inForceStatus"));
+        assert!(q.contains("jolux:dateEntryInForce"));
         assert!(q.contains("LIMIT 10"));
         assert!(q.contains(r#"LCASE("energie")"#));
     }
@@ -147,14 +192,67 @@ mod tests {
                "title":{"type":"literal","xml:lang":"de","value":"Testgesetz"}}
             ]}}"#,
         );
-        let hits = search_law(&client, "test", Language::De, 10).await.unwrap();
+        let hits = search_law(&client, "test", Language::De, 10, today())
+            .await
+            .unwrap();
         assert_eq!(hits[0].in_force, None);
+    }
+
+    /// 68 §F-3: Die Explorer-Falle. Ein Erlass, der HEUTE gilt
+    /// (Status /0, entry 2023-09-01), war am Stichtag 2020-06-01 noch nicht
+    /// in Kraft — `in_force` muss den Stichtag spiegeln, nicht den heutigen
+    /// Status. Der damals geltende Alt-Erlass (entry 1993, noLonger 2023)
+    /// ist am Stichtag `true` und sortiert zuerst.
+    #[tokio::test]
+    async fn in_force_reflects_as_of_not_today() {
+        let client = MockSparqlClient::from_json(
+            r#"{"head":{"vars":["ca","sr","title","status","entry","noLonger","endApp"]},"results":{"bindings":[
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2022/491"},
+               "sr":{"type":"literal","value":"235.1"},
+               "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz ueber den Datenschutz (DSG)"},
+               "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"},
+               "entry":{"type":"literal","value":"2023-09-01"}},
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1993/1945_1945_1945"},
+               "sr":{"type":"literal","value":"235.1"},
+               "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz ueber den Datenschutz (DSG)"},
+               "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/3"},
+               "entry":{"type":"literal","value":"1993-07-01"},
+               "noLonger":{"type":"literal","value":"2023-09-01"}}
+            ]}}"#,
+        );
+        let as_of = ValidAsOf::new(date!(2020 - 06 - 01));
+        let hits = search_law(&client, "Datenschutz", Language::De, 10, as_of)
+            .await
+            .unwrap();
+        // Am Stichtag gilt der Alt-Erlass — er steht zuerst.
+        assert_eq!(hits[0].eli, "eli/cc/1993/1945_1945_1945");
+        assert_eq!(hits[0].in_force, Some(true));
+        assert_eq!(hits[1].eli, "eli/cc/2022/491");
+        assert_eq!(hits[1].in_force, Some(false));
+    }
+
+    /// 68 §F-3: Ohne Datumsfelder sagt der heutige Status nichts über einen
+    /// historischen Stichtag — ehrlich `None` statt heutigen Status als
+    /// damalige Geltung auszugeben.
+    #[tokio::test]
+    async fn status_only_hit_is_unknown_for_past_as_of() {
+        let client = MockSparqlClient::from_json(FIXTURE);
+        let hits = search_law(
+            &client,
+            "energie",
+            Language::De,
+            10,
+            ValidAsOf::new(date!(2020 - 06 - 01)),
+        )
+        .await
+        .unwrap();
+        assert!(hits.iter().all(|h| h.in_force.is_none()));
     }
 
     #[tokio::test]
     async fn neutralizes_injection_in_query() {
         let client = MockSparqlClient::from_json(FIXTURE);
-        let _ = search_law(&client, r#"a") } INJECT {"#, Language::De, 5)
+        let _ = search_law(&client, r#"a") } INJECT {"#, Language::De, 5, today())
             .await
             .unwrap();
         let q = client.last_query().unwrap();

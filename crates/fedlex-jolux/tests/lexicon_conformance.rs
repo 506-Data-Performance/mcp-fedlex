@@ -25,6 +25,7 @@
 //! Endpoint überschreibbar via `FEDLEX_SPARQL_ENDPOINT`.
 
 use async_trait::async_trait;
+use fedlex_core::{ValidAsOf, swiss_today};
 use fedlex_jolux::{
     CitationDirection, JoluxError, Language, ManifestationFormat, PREFIXES, SparqlClient,
     SparqlResults, check_in_force, explore_node, find_related_by_topic, find_treaties,
@@ -118,7 +119,7 @@ fn stichtag() -> fedlex_core::ValidAsOf {
 #[ignore = "live: Netz + Fedlex-Endpoint nötig"]
 async fn jlx_res_01_resolve_sr_number() {
     let c = LiveClient::new();
-    let hits = resolve_sr_number(&c, "730.0", Language::De)
+    let hits = resolve_sr_number(&c, "730.0", Language::De, ValidAsOf::new(swiss_today()))
         .await
         .expect("resolve_sr_number live");
     assert!(
@@ -150,9 +151,15 @@ async fn jlx_res_01_resolve_sr_number() {
 #[ignore = "live: Netz + Fedlex-Endpoint nötig"]
 async fn jlx_res_02_search_law() {
     let c = LiveClient::new();
-    let hits = search_law(&c, "Energiegesetz", Language::De, 20)
-        .await
-        .expect("search_law live");
+    let hits = search_law(
+        &c,
+        "Energiegesetz",
+        Language::De,
+        20,
+        ValidAsOf::new(swiss_today()),
+    )
+    .await
+    .expect("search_law live");
     assert!(
         hits.iter().any(|h| h.sr_number.as_deref() == Some("730.0")),
         "Suche 'Energiegesetz' muss SR 730.0 enthalten, got: {hits:?}"

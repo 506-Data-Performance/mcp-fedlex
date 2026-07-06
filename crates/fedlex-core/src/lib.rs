@@ -24,7 +24,7 @@ pub use provenance::{Provenance, ProvenanceKind};
 
 pub use response::Response;
 pub use sensitive::Sensitive;
-pub use temporal::{TransactionTime, ValidAsOf};
+pub use temporal::{TransactionTime, ValidAsOf, swiss_date_at, swiss_today};
 
 #[cfg(test)]
 mod tests {

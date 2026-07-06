@@ -7,8 +7,8 @@
 //! [`Provenance`] der Antwort. Damit hängen Anfrage-Stempel und Antwort-Herkunft
 //! an denselben zwei Zeitachsen.
 
-use fedlex_core::{Eli, Provenance, TransactionTime, ValidAsOf};
-use time::{Date, Month, OffsetDateTime, UtcOffset, Weekday};
+use fedlex_core::{Eli, Provenance, TransactionTime, ValidAsOf, swiss_date_at};
+use time::Date;
 
 /// Stempel einer einzelnen Anfrage. Bindet beide Zeitachsen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,38 +87,6 @@ impl TemporalResolver {
             transaction_time: tx,
         }
     }
-}
-
-/// Kalendertag in der Schweiz (Europe/Zurich) zum gegebenen Zeitpunkt.
-///
-/// Schweizer Bundesrecht tritt um Mitternacht **Schweizer Zeit** in Kraft;
-/// der UTC-Kalendertag hinkt dem zwischen 22:00/23:00 UTC und Mitternacht
-/// hinterher und wäre als Default-Stichtag an Grenztagen falsch. CET/CEST
-/// wird direkt gerechnet statt über eine tz-Datenbank: Die Regel (Sommerzeit
-/// vom letzten März-Sonntag 01:00 UTC bis zum letzten Oktober-Sonntag
-/// 01:00 UTC) ist seit 1996 gesetzlich fixiert und EU/CH-identisch.
-pub fn swiss_date_at(instant: OffsetDateTime) -> Date {
-    let utc = instant.to_offset(UtcOffset::UTC);
-    let year = utc.year();
-    let dst_start = last_sunday_utc_1am(year, Month::March);
-    let dst_end = last_sunday_utc_1am(year, Month::October);
-    let offset = if utc >= dst_start && utc < dst_end {
-        UtcOffset::from_hms(2, 0, 0).expect("CEST ist ein gueltiger Offset")
-    } else {
-        UtcOffset::from_hms(1, 0, 0).expect("CET ist ein gueltiger Offset")
-    };
-    utc.to_offset(offset).date()
-}
-
-/// 01:00 UTC am letzten Sonntag des Monats (März/Oktober haben 31 Tage).
-fn last_sunday_utc_1am(year: i32, month: Month) -> OffsetDateTime {
-    let mut d = Date::from_calendar_date(year, month, 31).expect("Maerz und Oktober haben 31 Tage");
-    while d.weekday() != Weekday::Sunday {
-        d = d.previous_day().expect("Monat enthaelt einen Sonntag");
-    }
-    d.with_hms(1, 0, 0)
-        .expect("01:00 ist eine gueltige Uhrzeit")
-        .assume_utc()
 }
 
 #[cfg(test)]

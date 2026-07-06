@@ -177,7 +177,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Sucht Bundeserlasse nach Titel/Stichwort (Discovery, JLX-RES-02). Treffer tragen in_force (geltendes Recht steht zuerst; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
+            "description": "Sucht Bundeserlasse nach Titel/Stichwort (Discovery, JLX-RES-02). Treffer tragen in_force ZUM STICHTAG as_of (zum Stichtag geltendes Recht steht zuerst; fehlt in_force, mit check_in_force pruefen; Achtung: aufgehobene und geltende Erlasse koennen dieselbe SR-Nummer tragen). Liefert Kandidaten-ELIs als HINWEISE (kind=hint), kein Beleg — belege die Treffer anschliessend mit get_metadata/read_article.",
             "properties": {
                 "query": { "type": "string", "description": "Titel-Stichwort, z.B. Energiegesetz" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 },
@@ -190,9 +190,17 @@ where
         let query = arg_str(&args, "query")?;
         let lang = arg_lang(&args)?;
         let limit = arg_limit(&args);
-        let hits = search_law(self.client.as_ref(), query, lang, limit)
-            .await
-            .map_err(map_jolux)?;
+        // 68 §F-3: in_force der Treffer bezieht sich auf den Stichtag der
+        // Anfrage, nicht auf den heutigen Graph-Status.
+        let hits = search_law(
+            self.client.as_ref(),
+            query,
+            lang,
+            limit,
+            ctx.stamp.valid_as_of(),
+        )
+        .await
+        .map_err(map_jolux)?;
         let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
         Ok(Response::new(capped_list("hits", annotated, limit), prov))
@@ -218,7 +226,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Loest eine SR-Nummer zu Erlassen auf (Discovery, JLX-RES-01). Liefert MEHRERE Kandidaten als HINWEISE (kind=hint): SR-Nummern werden wiederverwendet, disambiguiere ueber in_force_status. Kein Beleg.",
+            "description": "Loest eine SR-Nummer zu Erlassen auf (Discovery, JLX-RES-01). Liefert MEHRERE Kandidaten als HINWEISE (kind=hint): SR-Nummern werden wiederverwendet, disambiguiere ueber in_force (gilt ZUM STICHTAG as_of; in_force_status dagegen ist immer der heutige Status). Kein Beleg.",
             "properties": {
                 "sr_number": { "type": "string", "description": "SR-Nummer, z.B. 730.0" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
@@ -229,7 +237,8 @@ where
     async fn execute(&self, ctx: &ToolContext, args: Value) -> Result<Response<Value>, ToolError> {
         let sr = arg_str(&args, "sr_number")?;
         let lang = arg_lang(&args)?;
-        let hits = resolve_sr_number(self.client.as_ref(), sr, lang)
+        // 68 §F-3: siehe search_law — Stichtags-treues in_force.
+        let hits = resolve_sr_number(self.client.as_ref(), sr, lang, ctx.stamp.valid_as_of())
             .await
             .map_err(map_jolux)?;
         let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
@@ -592,11 +601,12 @@ mod tests {
 
     /// Canned SR-Auflösung (JLX-RES-01): zwei Treffer derselben SR-Nummer.
     const SR_JSON: &str = r#"{
-      "head": { "vars": ["ca", "title", "status"] },
+      "head": { "vars": ["ca", "title", "status", "entry", "noLonger", "endApp"] },
       "results": { "bindings": [
         { "ca": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2017/762" },
           "title": { "type": "literal", "value": "Energiegesetz" },
-          "status": { "type": "uri", "value": "https://fedlex.data.admin.ch/vocabulary/enforcement-status/0" } },
+          "status": { "type": "uri", "value": "https://fedlex.data.admin.ch/vocabulary/enforcement-status/0" },
+          "entry": { "type": "literal", "value": "2018-01-01" } },
         { "ca": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/1999/27" } }
       ] }
     }"#;
@@ -712,9 +722,14 @@ mod tests {
         let elis: Vec<&str> = hits.iter().map(|h| h["eli"].as_str().unwrap()).collect();
         assert!(elis.contains(&"eli/cc/2017/762"));
         assert!(elis.contains(&"eli/cc/1999/27"));
-        // 68 §C-5: Disambiguierung direkt als Flag — enforcement-status/0 → true.
+        // 68 §C-5/F-3: Disambiguierung direkt als Flag — stichtagstreu aus den
+        // Datumsfeldern (entry 2018-01-01 <= Stichtag 2026-06-01).
         let eng2016 = hits.iter().find(|h| h["eli"] == "eli/cc/2017/762").unwrap();
         assert_eq!(eng2016["in_force"], true, "{out}");
+        // Ohne Datumsfelder und mit nicht-heutigem Stichtag bleibt in_force
+        // ehrlich weg (heutiger Status belegt keine historische Geltung).
+        let eng1999 = hits.iter().find(|h| h["eli"] == "eli/cc/1999/27").unwrap();
+        assert!(eng1999.get("in_force").is_none(), "{out}");
     }
 
     #[tokio::test]
