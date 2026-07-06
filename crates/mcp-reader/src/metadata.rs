@@ -1461,7 +1461,10 @@ mod tests {
     const EMPTY_JSON2: &str = r#"{ "head": { "vars": [] }, "results": { "bindings": [] } }"#;
 
     #[tokio::test]
-    async fn get_law_metadata_carries_norm_provenance() {
+    async fn get_law_metadata_unknown_eli_is_graceful_not_found() {
+        // 68 §F-10 (invertiert das fruehere Verhalten): ein leeres
+        // Binding-Set hiess frueher «alle Felder None, kind=norm» — ein
+        // Beleg-Etikett ueber Nichts. Jetzt: gracefuler NotFound mit Hint.
         let result = registry_with(EMPTY_JSON2)
             .dispatch(
                 &ctx(Role::Navigator),
@@ -1469,10 +1472,13 @@ mod tests {
                 serde_json::json!({ "eli": "eli/cc/2017/762" }),
             )
             .await;
-        // Leeres Binding-Set: Felder bleiben None (kein Fehler), die
-        // Norm-Provenance des angefragten Erlasses steht trotzdem.
-        assert_eq!(result["provenance"]["kind"], "norm", "{result}");
-        assert_eq!(result["provenance"]["eli"], "eli/cc/2017/762");
+        assert!(result["error"].is_string(), "{result}");
+        assert!(
+            result["hint"]
+                .as_str()
+                .is_some_and(|h| h.contains("search_law")),
+            "{result}"
+        );
     }
 
     #[tokio::test]
