@@ -32,6 +32,12 @@ pub struct LawHit {
     /// [`check_in_force`]: crate::temporal::check_in_force
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_force: Option<bool>,
+    /// Verify-V2: `true`, wenn das Objekt weder Status noch irgendein
+    /// Geltungs-Datum trägt — fast immer ein Publikations-Zwischenobjekt
+    /// (live: `eli/cc/2020/2930_cc` neben dem kanonischen nDSG). Solche
+    /// Treffer sortieren ans Gruppen-Ende; bevorzuge den kanonischen ELI.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stub: bool,
 }
 
 // `historicalLegalId` ist OPTIONAL (68 §F-1): neue Konsolidierungen (nDSG,
@@ -204,6 +210,12 @@ pub async fn search_law(
 
     // Gruppe 1: Substring auf Titel/Volksnamen — die Umlaut-Variante
     // («ueber» → «über») läuft als ODER-Zweig mit (68 §F-5).
+    // Verify-V1: SPARQL holt MEHR als limit Zeilen, denn der Dedup (F-19)
+    // schrumpft die Liste NACH dem LIMIT — vorher meldete ein volles, durch
+    // Dedup geschrumpftes Fenster truncated:false, und das dahinterliegende
+    // Covid-19-Gesetz war unsichtbar UND unsignalisiert. Nach dem Dedup wird
+    // auf limit gekappt; ein volles Fenster ergibt wieder truncated:true.
+    let overfetch = (limit.saturating_mul(2)).clamp(limit, 100);
     let variant = umlaut_variant(&safe).unwrap_or_else(|| safe.clone());
     let sparql = format!(
         "{PREFIXES}{}",
@@ -211,7 +223,7 @@ pub async fn search_law(
             .replace("__LANGURI__", lang.vocab_uri())
             .replace("__QUERY2__", &variant)
             .replace("__QUERY__", &safe)
-            .replace("__LIMIT__", &limit.to_string())
+            .replace("__LIMIT__", &overfetch.to_string())
             .replace("__OFFSET__", &offset.to_string())
     );
     let res = client.query(&sparql).await?;
@@ -223,6 +235,7 @@ pub async fn search_law(
     grouped.sort_by_key(|(group, h)| {
         (
             *group,
+            h.stub, // Verify-V2: Zwischenobjekte hinter echte Treffer
             match h.in_force {
                 Some(true) => 0u8,
                 None => 1,
@@ -251,6 +264,10 @@ fn collect_hits(
         let Some(title) = val(b, "title") else {
             continue;
         };
+        let stub = val(b, "status").is_none()
+            && val(b, "entry").is_none()
+            && val(b, "noLonger").is_none()
+            && val(b, "endApp").is_none();
         let hit = LawHit {
             eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
             sr_number: val(b, "sr").map(str::to_string),
@@ -263,6 +280,7 @@ fn collect_hits(
                 val(b, "endApp"),
                 as_of,
             ),
+            stub,
         };
         match out.iter_mut().find(|(_, h)| h.eli == hit.eli) {
             Some((_, existing)) => {
@@ -325,7 +343,7 @@ mod tests {
         assert!(q.contains("ConsolidationAbstract"));
         assert!(q.contains("jolux:inForceStatus"));
         assert!(q.contains("jolux:dateEntryInForce"));
-        assert!(q.contains("LIMIT 10"));
+        assert!(q.contains("LIMIT 20"), "Overfetch limit*2: {q}");
         assert!(q.contains(r#"LCASE("energie")"#));
     }
 
@@ -443,7 +461,7 @@ mod tests {
             .unwrap();
         let qs = client.queries();
         assert_eq!(qs.len(), 1, "keine Kürzel-Vorabfrage beim Blättern");
-        assert!(qs[0].contains("LIMIT 10 OFFSET 20"));
+        assert!(qs[0].contains("LIMIT 20 OFFSET 20"), "{}", qs[0]);
     }
 
     /// Lange Phrasen sind nie Kürzel — keine Vorabfrage, keine Extra-Latenz.
@@ -547,6 +565,71 @@ mod tests {
         let q = client.last_query().unwrap();
         assert!(q.contains("Bundesgesetz ueber den Datenschutz"));
         assert!(q.contains("Bundesgesetz über den Datenschutz"));
+    }
+
+    /// Verify-V1: Der F-19-Dedup schrumpfte die Liste NACH dem SPARQL-LIMIT —
+    /// ein volles Fenster meldete truncated:false und der Rest (Covid-19-
+    /// Gesetz) war unsichtbar UND unsignalisiert. Jetzt: Overfetch, Kappung
+    /// auf limit erst nach dem Dedup.
+    #[tokio::test]
+    async fn overfetch_keeps_truncated_honest_after_dedup() {
+        // 3 Rohzeilen, davon 2 Duplikate derselben ELI -> 2 unique Hits.
+        // limit=2: SPARQL muss MEHR als 2 anfordern (LIMIT 4) und die
+        // Kappung passiert nach dem Dedup.
+        let rows = r#"{"head":{"vars":["ca","sr","title","status","entry"]},"results":{"bindings":[
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2020/195"},
+           "title":{"type":"literal","xml:lang":"de","value":"COVID-19-Verordnung Miete"},
+           "entry":{"type":"literal","value":"2020-03-27"}},
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2020/195"},
+           "title":{"type":"literal","xml:lang":"de","value":"COVID-19-Verordnung Miete"},
+           "entry":{"type":"literal","value":"2020-03-27"}},
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2020/711"},
+           "title":{"type":"literal","xml:lang":"de","value":"Covid-19-Gesetz"},
+           "entry":{"type":"literal","value":"2020-09-26"}}
+        ]}}"#;
+        let client = MockSparqlClient::from_json(rows);
+        let hits = search_law(
+            &client,
+            "Covid-19 Epidemie Massnahmen",
+            Language::De,
+            2,
+            0,
+            today(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(hits.len(), 2, "{hits:?}");
+        let q = client.last_query().unwrap();
+        assert!(q.contains("LIMIT 4"), "Overfetch fehlt: {q}");
+    }
+
+    /// Verify-V2: Publikations-Zwischenobjekte (weder Status noch Datum)
+    /// werden als stub markiert und sortieren hinter echte Treffer.
+    #[tokio::test]
+    async fn stub_objects_are_flagged_and_sort_last() {
+        let rows = r#"{"head":{"vars":["ca","sr","title","status","entry"]},"results":{"bindings":[
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2020/2930_cc"},
+           "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz ueber den Datenschutz (DSG)"}},
+          {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2022/491"},
+           "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz ueber den Datenschutz (DSG)"},
+           "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"},
+           "entry":{"type":"literal","value":"2023-09-01"}}
+        ]}}"#;
+        let client = MockSparqlClient::from_json(rows);
+        let hits = search_law(
+            &client,
+            "Datenschutz und mehr Woerter",
+            Language::De,
+            10,
+            0,
+            today(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(hits[0].eli, "eli/cc/2022/491");
+        assert!(!hits[0].stub);
+        assert_eq!(hits[1].eli, "eli/cc/2020/2930_cc");
+        assert!(hits[1].stub, "{hits:?}");
     }
 
     #[tokio::test]

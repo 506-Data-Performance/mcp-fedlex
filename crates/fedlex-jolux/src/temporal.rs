@@ -153,6 +153,12 @@ pub struct InForce {
     /// as_of=2999-12-31 kommentarlos als kind=norm beantwortet.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub future_as_of: bool,
+    /// Verify-V3: `true`, wenn der Graph WEDER Status NOCH irgendein
+    /// Geltungs-Datum zum Objekt kennt — `in_force: false` heisst dann
+    /// «keine Daten», nicht «ausser Kraft». Vorher sah das Datenloch wie
+    /// eine belastbare Negativ-Aussage aus (Stub `eli/cc/2020/2930_cc`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_enforcement_data: bool,
 }
 
 const IN_FORCE_Q: &str = r#"SELECT ?status ?statusLabel ?entry ?noLonger ?endApp WHERE {
@@ -212,8 +218,11 @@ pub async fn check_in_force(
             .is_some_and(|s| s.ends_with("/0"))
     };
 
+    let no_enforcement_data =
+        current_status_uri.is_none() && entry.is_none() && no_longer.is_none() && end_app.is_none();
     let data = InForce {
         in_force,
+        no_enforcement_data,
         future_as_of: as_of.date() > fedlex_core::swiss_today(),
         current_status_uri,
         current_status_label,
@@ -230,6 +239,20 @@ mod tests {
     use super::*;
     use crate::client::MockSparqlClient;
     use time::macros::date;
+
+    /// Verify-V3: lauter Nulls hiess vorher stillschweigend in_force:false —
+    /// ein Datenloch sah aus wie eine belastbare Negativ-Aussage.
+    #[tokio::test]
+    async fn empty_enforcement_data_is_flagged() {
+        let empty = r#"{"head":{"vars":["status","statusLabel","entry","noLonger","endApp"]},"results":{"bindings":[{}]}}"#;
+        let client = MockSparqlClient::from_json(empty);
+        let eli = Eli::new("eli/cc/2020/2930_cc").unwrap();
+        let resp = check_in_force(&client, &eli, ValidAsOf::new(date!(2026 - 07 - 07)))
+            .await
+            .unwrap();
+        assert!(!resp.data().in_force);
+        assert!(resp.data().no_enforcement_data, "{:?}", resp.data());
+    }
 
     const FIXTURE: &str = r#"{
       "head": {"vars": ["cons","date","url"]},
