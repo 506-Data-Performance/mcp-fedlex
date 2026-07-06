@@ -249,8 +249,8 @@ get_structure/search_text orientieren → gezielt read_article/read_element lese
 (read_document ist gross). Werk-ELIs haben die Form `eli/cc/2017/762`, \
 AS-Publikationen `eli/oc/…`; Element-IDs (eid) die Form `art_19` bzw. \
 `art_19/para_2`. Zeitpunktgenau: setze `as_of` (JJJJ-MM-TT) als Argument — ohne \
-`as_of` gilt das heutige Datum; das effektiv verwendete Datum steht immer in \
-provenance.valid_as_of. Fehler kommen in-band als {error, hint} — folge dem hint.";
+`as_of` gilt das heutige Datum (Schweizer Zeit); das effektiv verwendete Datum steht \
+immer in provenance.valid_as_of. Fehler kommen in-band als {error, hint} — folge dem hint.";
 
 /// Der zustandslose MCP-Dienst. Bündelt Registry, Auth, Quota und Temporal.
 pub struct McpService<A: AuthResolver, B: QuotaBackend> {

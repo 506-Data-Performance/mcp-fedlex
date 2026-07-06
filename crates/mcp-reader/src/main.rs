@@ -106,9 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Discovery, nur Navigator/Validator sichtbar und im Quota gleich gewichtet.
     register_metadata_tools(&mut registry, Arc::new(sparql.clone()));
 
-    let today = time::OffsetDateTime::now_utc().date();
-
-    let temporal = TemporalResolver::new(today);
+    // Default-Stichtag ist der Schweizer Kalendertag ZUR ANFRAGEZEIT (68 §F-6):
+    // ein beim Start eingefrorenes «heute» veraltet mit jedem Lauftag des Pods
+    // und stempelte real den Vortag.
+    let temporal = TemporalResolver::swiss_today();
     let service = Arc::new(McpService::new(registry, auth, limiter, temporal));
 
     // Redis ist ready-kritisch (Quota); Fedlex nur informativ (67 §H-8):

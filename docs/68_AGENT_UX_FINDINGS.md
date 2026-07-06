@@ -262,7 +262,7 @@ C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
 | F-3 | Reibung | `in_force`/`in_force_status` in search_law-/resolve_sr_number-Treffern ignoriert `as_of` und widerspricht check_in_force — Disambiguierung wählt am Stichtag das falsche Gesetz | `resolve_sr_number {"sr_number":"235.1","as_of":"2020-06-01"}` | 🔴 |
 | F-4 | Reibung | search_law ist Substring-/Phrasensuche: «OR»→Rheinschiffe, «ArG»→Argentinien, obwohl parse_unlinked_ref Kürzel explizit dorthin verweist | `search_law {"query":"OR","limit":5}` | 🔴 |
 | F-5 | Reibung | Leere Trefferlisten ohne Reformulierungs-/Umleitungs-Hinweis; keine Umlaut-Normalisierung («ueber» 0 vs. «über» 1 Treffer) | `search_law {"query":"Bundesgesetz ueber den Datenschutz"}` | 🔴 |
-| F-6 | Reibung | Default-Stichtag ist der Boot-Tag des Pods statt «heute» (real: Vortag), divergent zum semantic-Server, entgegen instructions | Aufruf ohne `as_of`, provenance.valid_as_of prüfen | 🟡 |
+| F-6 | Reibung | Default-Stichtag ist der Boot-Tag des Pods statt «heute» (real: Vortag), divergent zum semantic-Server, entgegen instructions | Aufruf ohne `as_of`, provenance.valid_as_of prüfen | 🟢 `TemporalResolver::swiss_today()`: Anfrage-Tag Europe/Zurich statt Boot-Tag |
 | F-9 | Reibung | search_law: eponymes Gesetz fehlt in Top-N (GlG), truncated=true ohne offset-Parameter — Rest unerreichbar | `search_law {"query":"Gleichstellung","limit":8}` | 🔴 |
 | F-10 | Reibung | get_law_metadata liefert für valide, nicht existierende ELIs ein Null-Objekt mit kind=norm statt Fehler | `get_law_metadata {"eli":"eli/cc/9999/99999"}` | 🔴 |
 | F-11 | Reibung | get_law_metadata: sr_number=null (obwohl via SR gefunden), Abkürzung/Status fehlen | `get_law_metadata {"eli":"eli/cc/2022/491"}` | 🔴 |

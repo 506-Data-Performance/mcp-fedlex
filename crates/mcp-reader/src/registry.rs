@@ -69,7 +69,7 @@ impl Registry {
                     props.entry("as_of").or_insert_with(|| {
                         json!({
                             "type": "string",
-                            "description": "Stichtag JJJJ-MM-TT (optional; Default: heute). Bestimmt die geltende Fassung; das effektiv verwendete Datum steht in provenance.valid_as_of.",
+                            "description": "Stichtag JJJJ-MM-TT (optional; Default: heute, Schweizer Zeit). Bestimmt die geltende Fassung; das effektiv verwendete Datum steht in provenance.valid_as_of.",
                         })
                     });
                 }
