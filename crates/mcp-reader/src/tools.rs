@@ -89,8 +89,8 @@ where
 
 /// Pflicht-Argument `eli` lesen und validieren.
 fn arg_eli(args: &Value) -> Result<Eli, ToolError> {
-    let raw = arg_str(args, "eli")?;
-    Eli::new(raw).map_err(|e| ToolError::InvalidArguments(e.to_string()))
+    // 68 §F-12: tolerant gegen volle fedlex-URLs und chunk_ids (zentral).
+    crate::tool::require_eli(args)
 }
 
 /// Pflicht-Argument mit gegebenem Namen als String lesen (68 §F-16:

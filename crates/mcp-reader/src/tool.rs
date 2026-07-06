@@ -169,6 +169,30 @@ pub(crate) fn require_str<'a>(args: &'a Value, name: &str) -> Result<&'a str, To
     }
 }
 
+/// Pflicht-Argument `eli` lesen, tolerant normalisiert (68 §F-12): Tools
+/// emittieren selbst volle fedlex-URIs (list_versions, get_citations,
+/// Fussnoten), aber die eli-Parameter lehnten sie ab — der Roundtrip brach
+/// am eigenen Ausgabeformat und das Praefix-Strippen blieb am Agenten.
+/// Volle URLs werden auf die `eli/`-Kurzform gestrippt; eine angehaengte
+/// `#eid` (chunk_id-Form aus dem semantic-Server) wird mit konkretem
+/// Split-Rezept abgelehnt statt mit einem Prefix-Fehler.
+pub(crate) fn require_eli(args: &Value) -> Result<fedlex_core::Eli, ToolError> {
+    let raw = require_str(args, "eli")?;
+    if let Some((eli_part, eid)) = raw.split_once('#') {
+        let eli_short = eli_part
+            .strip_prefix("https://fedlex.data.admin.ch/")
+            .unwrap_or(eli_part);
+        return Err(ToolError::InvalidArguments(format!(
+            "`eli` enthaelt eine chunk_id: splitte am `#` — eli `{eli_short}`, eid `{eid}`"
+        )));
+    }
+    let stripped = raw
+        .strip_prefix("https://fedlex.data.admin.ch/")
+        .or_else(|| raw.strip_prefix("http://fedlex.data.admin.ch/"))
+        .unwrap_or(raw);
+    fedlex_core::Eli::new(stripped).map_err(|e| ToolError::InvalidArguments(e.to_string()))
+}
+
 /// Menschlicher Name eines JSON-Typs für Fehlermeldungen.
 pub(crate) fn json_type_name(v: &Value) -> &'static str {
     match v {
@@ -221,6 +245,23 @@ mod tests {
         // Der generische Kreis-Hint gilt weiterhin fuer echte Nicht-Existenz.
         let generic = ToolError::NotFound("irgendwas".into());
         assert!(generic.hint().contains("search_law"));
+    }
+
+    /// 68 §F-12: Der Server lehnte sein eigenes Ausgabeformat ab — volle
+    /// https-URIs aus list_versions/get_citations scheiterten als eli-Input;
+    /// chunk_ids bekamen nur einen Prefix-Fehler ohne Split-Rezept.
+    #[test]
+    fn require_eli_strips_full_urls_and_explains_chunk_ids() {
+        use serde_json::json;
+        let ok = require_eli(&json!({"eli": "https://fedlex.data.admin.ch/eli/cc/2022/491"}))
+            .expect("volle URL wird gestrippt");
+        assert_eq!(ok.as_str(), "eli/cc/2022/491");
+        let short = require_eli(&json!({"eli": "eli/cc/2022/491"})).unwrap();
+        assert_eq!(short.as_str(), "eli/cc/2022/491");
+        let chunk = require_eli(&json!({"eli": "eli/cc/2022/491#art_25"})).unwrap_err();
+        let msg = chunk.to_string();
+        assert!(msg.contains("splitte am `#`"), "{msg}");
+        assert!(msg.contains("eid `art_25`"), "{msg}");
     }
 
     /// 68 §F-16: «fehlt» vs. «falscher Typ» sind verschiedene Diagnosen.

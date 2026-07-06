@@ -120,8 +120,8 @@ where
 /// Pflicht-Argument `eli` als validiertes [`Eli`] lesen (68 §F-16:
 /// Typfehler werden als Typfehler gemeldet, nicht als «fehlt»).
 fn arg_eli(args: &Value) -> Result<Eli, ToolError> {
-    let raw = crate::tool::require_str(args, "eli")?;
-    Eli::new(raw).map_err(|e| ToolError::InvalidArguments(e.to_string()))
+    // 68 §F-12: tolerant gegen volle fedlex-URLs und chunk_ids (zentral).
+    crate::tool::require_eli(args)
 }
 
 /// Optionales Argument `lang` lesen (Default Deutsch).
