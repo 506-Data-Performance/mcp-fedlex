@@ -10,7 +10,11 @@ use serde::{Deserialize, Serialize};
 pub struct LawHit {
     /// ELI des Erlasses (relativ, `eli/cc/...`).
     pub eli: String,
-    /// SR-Nummer, sofern vorhanden.
+    /// SR-Nummer, sofern als `historicalLegalId` am Erlass vorhanden. Neue
+    /// Konsolidierungen (z. B. das nDSG, `eli/cc/2022/491`) tragen kein
+    /// SR-Literal mehr — dann `None`; auflösbar über `get_law_metadata`
+    /// oder rückwärts über `resolve_sr_number` (Taxonomie-Pfad). Der
+    /// Taxonomie-Join wäre hier zu teuer (live +0.65 s je Suche, 68 §F-34).
     pub sr_number: Option<String>,
     /// Titel des Treffers.
     pub title: String,
@@ -26,12 +30,16 @@ pub struct LawHit {
     pub in_force: Option<bool>,
 }
 
+// `historicalLegalId` ist OPTIONAL (68 §F-1): neue Konsolidierungen (nDSG,
+// `eli/cc/2022/491`) tragen kein SR-Literal am Erlass — als Pflicht-Pattern
+// schloss es genau das geltende Recht von der Titelsuche aus (der Explorer-
+// Blocker: «Datenschutzgesetz» fand ausschliesslich aufgehobene Erlasse).
 const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?status ?entry ?noLonger ?endApp WHERE {
   ?ca a jolux:ConsolidationAbstract ;
-      jolux:historicalLegalId ?sr ;
       jolux:isRealizedBy ?expr .
   ?expr jolux:language <__LANGURI__> ;
         jolux:title ?title .
+  OPTIONAL { ?ca jolux:historicalLegalId ?sr }
   OPTIONAL { ?ca jolux:inForceStatus ?status }
   OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
   OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
@@ -98,26 +106,37 @@ pub async fn search_law(
             .replace("__LIMIT__", &limit.to_string())
     );
     let res = client.query(&sparql).await?;
-    let mut hits: Vec<LawHit> = res
-        .bindings()
-        .iter()
-        .filter_map(|b| {
-            let ca = val(b, "ca")?;
-            let title = val(b, "title")?.to_string();
-            Some(LawHit {
-                eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
-                sr_number: val(b, "sr").map(str::to_string),
-                title,
-                in_force: in_force_at(
-                    val(b, "status"),
-                    val(b, "entry"),
-                    val(b, "noLonger"),
-                    val(b, "endApp"),
-                    as_of,
-                ),
-            })
-        })
-        .collect();
+    let mut hits: Vec<LawHit> = Vec::new();
+    for b in res.bindings() {
+        let Some(ca) = val(b, "ca") else { continue };
+        let Some(title) = val(b, "title") else {
+            continue;
+        };
+        let hit = LawHit {
+            eli: ca.strip_prefix(FEDLEX_BASE).unwrap_or(ca).to_string(),
+            sr_number: val(b, "sr").map(str::to_string),
+            title: title.to_string(),
+            in_force: in_force_at(
+                val(b, "status"),
+                val(b, "entry"),
+                val(b, "noLonger"),
+                val(b, "endApp"),
+                as_of,
+            ),
+        };
+        // Dedup pro ELI (68 §F-19): Mehrfach-Bindings (z. B. mehrere
+        // Expressions) lieferten denselben Erlass wortgleich doppelt —
+        // DISTINCT griff nicht, weil sich Nebenvariablen unterscheiden.
+        // Erste Zeile gewinnt; fehlende sr_number wird nachgetragen.
+        match hits.iter_mut().find(|h| h.eli == hit.eli) {
+            Some(existing) => {
+                if existing.sr_number.is_none() {
+                    existing.sr_number = hit.sr_number;
+                }
+            }
+            None => hits.push(hit),
+        }
+    }
     // 68 §C-5: Geltendes Recht zuerst. Live stand das aufgehobene EnG 1998
     // VOR dem geltenden EnG 2016 (beide SR 730.0) — die klassische
     // Agenten-Falsch-Wahl «erster Treffer = richtig». Aufgehobenes ans Ende,
@@ -247,6 +266,54 @@ mod tests {
         .await
         .unwrap();
         assert!(hits.iter().all(|h| h.in_force.is_none()));
+    }
+
+    /// 68 §F-1 (Explorer-Blocker): Neue Konsolidierungen ohne SR-Literal
+    /// (nDSG) müssen per Titel auffindbar sein — `historicalLegalId` ist
+    /// OPTIONAL, `sr_number` bleibt dann leer statt den Treffer zu schlucken.
+    #[tokio::test]
+    async fn finds_law_without_sr_literal() {
+        let client = MockSparqlClient::from_json(
+            r#"{"head":{"vars":["ca","sr","title","status","entry"]},"results":{"bindings":[
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2022/491"},
+               "title":{"type":"literal","xml:lang":"de","value":"Bundesgesetz ueber den Datenschutz (Datenschutzgesetz, DSG)"},
+               "status":{"type":"uri","value":"https://fedlex.data.admin.ch/vocabulary/enforcement-status/0"},
+               "entry":{"type":"literal","value":"2023-09-01"}}
+            ]}}"#,
+        );
+        let hits = search_law(&client, "Datenschutzgesetz", Language::De, 10, today())
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].eli, "eli/cc/2022/491");
+        assert_eq!(hits[0].sr_number, None);
+        assert_eq!(hits[0].in_force, Some(true));
+        // Das Pflicht-Pattern ist wirklich weg.
+        let q = client.last_query().unwrap();
+        assert!(q.contains("OPTIONAL { ?ca jolux:historicalLegalId ?sr }"));
+    }
+
+    /// 68 §F-19: Mehrfach-Bindings desselben Erlasses (z. B. über mehrere
+    /// Expressions) kollabieren zu EINEM Treffer; sr_number wird gemerged.
+    #[tokio::test]
+    async fn duplicate_rows_collapse_to_one_hit() {
+        let client = MockSparqlClient::from_json(
+            r#"{"head":{"vars":["ca","sr","title","status","entry"]},"results":{"bindings":[
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2019/112"},
+               "title":{"type":"literal","xml:lang":"de","value":"Schengen-Datenschutzgesetz"},
+               "entry":{"type":"literal","value":"2019-03-01"}},
+              {"ca":{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2019/112"},
+               "sr":{"type":"literal","value":"235.3"},
+               "title":{"type":"literal","xml:lang":"de","value":"Schengen-Datenschutzgesetz"},
+               "entry":{"type":"literal","value":"2019-03-01"}}
+            ]}}"#,
+        );
+        let hits = search_law(&client, "Datenschutz", Language::De, 10, today())
+            .await
+            .unwrap();
+        assert_eq!(hits.len(), 1, "Duplikat nicht kollabiert: {hits:?}");
+        // Die sr_number aus der zweiten Zeile ist nachgetragen.
+        assert_eq!(hits[0].sr_number.as_deref(), Some("235.3"));
     }
 
     #[tokio::test]
