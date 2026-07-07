@@ -190,7 +190,7 @@ where
             "properties": {
                 "query": { "type": "string", "description": "Titel-Stichwort, amtliches Kuerzel oder Volksname, z.B. Energiegesetz, OR, Arbeitsgesetz" },
                 "limit": { "type": "integer", "default": 20, "maximum": 50 },
-                "offset": { "type": "integer", "default": 0, "description": "Blaettert bei truncated=true weiter: naechste Seite mit offset = offset + limit_applied (68 F-9)" },
+                "offset": { "type": "integer", "default": 0, "description": "Blaettert bei truncated=true weiter: naechste Seite mit offset = offset + limit_applied (68 F-9). Vollstaendigkeits-Kontrakt: truncated=true heisst zuverlaessig 'es gibt mehr' (zaehlt distinkte Erlasse); eine Gesamtzahl (total) liefert search_law bewusst NICHT, da sie eine zweite teure Zaehl-Query braeuchte — blaettere bis truncated=false oder praezisiere die Suche (Verify-L21)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
             "required": ["query"]

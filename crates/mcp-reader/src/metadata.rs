@@ -267,7 +267,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet alle Fassungen (Consolidations) eines Erlasses chronologisch (JLX-TMP-01). Leere Liste, wenn der Erlass keine Consolidations hat (kein Fehler). Liefert einen BELEG (kind=norm) ueber den genannten Erlass.",
+            "description": "Listet alle Fassungen (Consolidations) eines Erlasses chronologisch (JLX-TMP-01). Vollstaendig: der interne Cap (500) liegt weit ueber dem realen Maximum (~118 bei Bundesgesetzen) — eine Liste von z. B. 100 Eintraegen ist der volle Bestand, kein stiller Cap. Leere Liste, wenn der Erlass keine Consolidations hat (kein Fehler). Liefert einen BELEG (kind=norm) ueber den genannten Erlass.",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" }
             },

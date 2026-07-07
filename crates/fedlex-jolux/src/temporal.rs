@@ -86,10 +86,14 @@ pub struct Version {
     pub date_applicability: String,
 }
 
+// Verify-L11: Cap deutlich ueber das beobachtete Maximum (Bundesgesetz max
+// 118 Fassungen, J14.1b) — damit ist die Liste fuer reale Erlasse immer
+// vollstaendig; ein Agent, der 100 Eintraege sah, hatte keinen stillen Cap,
+// sondern 100 echte Fassungen. Die Tool-Beschreibung sagt das jetzt auch.
 const VERSIONS_Q: &str = r#"SELECT DISTINCT ?cons ?date WHERE {
   ?cons jolux:isMemberOf <__URI__> ;
         jolux:dateApplicability ?date .
-} ORDER BY ?date LIMIT 200"#;
+} ORDER BY ?date LIMIT 500"#;
 
 /// JLX-TMP-01: Listet alle Fassungen (Consolidations) eines Erlasses, chronologisch.
 ///
