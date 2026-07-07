@@ -481,7 +481,7 @@ where
             "description": "Ganzer Erlass als lesbares Markdown (AKN-TXT-03), mit Zeichen-Budget gegen Kontext-Sprengung. Für Zitate read_article/read_element nutzen; für Überblick get_structure.",
             "properties": {
                 "eli": { "type": "string" },
-                "max_chars": { "type": "integer", "default": 120000, "description": "Zeichen-Budget; darüber wird gekappt (truncated=true, Fortsetzung via offset=next_offset). 0 = unbegrenzt." },
+                "max_chars": { "type": "integer", "default": 120000, "description": "Zeichen-Budget; darüber wird gekappt (truncated=true, Fortsetzung via offset=next_offset). 0 = unbegrenzt. Ungueltige Werte (negativ, Nicht-Zahl) fallen auf den Default zurueck; der effektiv verwendete Wert steht in max_chars_applied (Verify-V7)." },
                 "offset": { "type": "integer", "default": 0, "description": "Zeichen-Offset für Fortsetzungs-Lektüre (next_offset der vorigen Antwort)" },
                 "lang": { "type": "string", "enum": ["de", "fr", "it", "en", "rm"], "default": "de" }
             },
@@ -498,6 +498,10 @@ where
         // Tokens) — mehr als die meisten Agenten-Budgets für den ganzen
         // Recherche-Schritt. Zeichen-Budget mit ehrlichem Truncation-Signal
         // (B-2) statt stiller Vollausgabe; Fortsetzung über offset.
+        // Verify-V7/L18: max_chars/offset fielen bei falschem Typ oder
+        // negativem Wert still auf den Default — der Agent sah nicht, mit
+        // welchem Budget wirklich gerechnet wurde. Der effektive Wert wird
+        // jetzt als *_applied ausgewiesen (wie limit_applied bei den Listen).
         let max_chars = args
             .get("max_chars")
             .and_then(Value::as_u64)
@@ -516,6 +520,8 @@ where
                 "total_chars": total_chars,
                 "truncated": truncated,
                 "next_offset": if truncated { Value::from(end) } else { Value::Null },
+                "max_chars_applied": max_chars,
+                "offset_applied": offset,
             }),
             prov,
         ))
@@ -1181,6 +1187,19 @@ mod tests {
         assert_eq!(first["data"]["total_chars"].as_u64().unwrap(), total);
         let next = first["data"]["next_offset"].as_u64().unwrap();
         assert_eq!(next, 10);
+        // Verify-V7: effektives Budget offengelegt.
+        assert_eq!(first["data"]["max_chars_applied"], 10);
+        assert_eq!(first["data"]["offset_applied"], 0);
+
+        // Ungueltiges max_chars faellt auf Default, sichtbar in max_chars_applied.
+        let bad = reg
+            .dispatch(
+                &ctx(),
+                "read_document",
+                json!({ "eli": "eli/cc/2017/762", "max_chars": -5 }),
+            )
+            .await;
+        assert_eq!(bad["data"]["max_chars_applied"], 120_000);
 
         let rest = reg
             .dispatch(
