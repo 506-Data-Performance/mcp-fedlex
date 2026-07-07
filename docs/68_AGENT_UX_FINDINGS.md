@@ -307,3 +307,33 @@ C-1/C-2/C-5–C-8 als Ergonomie-Welle. *(So umgesetzt am 2026-07-02.)*
 | V-20 | resolve_consolidation_at: nacktes not-found statt Fassungs-Diagnose | 🟢 gleiche differenzierte Meldung wie F-2 (ae4c2f1) |
 | V-24 | index_info-outputSchema beschrieb hits-Felder, die es nie gibt | 🟢 eigenes Schema (semantic c1edb0e) |
 | V-28 | get_article_history verschweigt Einfügung 2021 (OR 329g); list_versions ohne XML-Verfügbarkeit | 🔴 Untersuchungs-Ticket: Impact-Query-Lücke vs. Daten-Realität live klären |
+
+---
+
+## L — Lauf 3 (2026-07-07): neue Findings — Abarbeitung Iteration 3
+
+> Quelle: `benchmarks/mcp-explorer` `runs/2026-07-07-lauf3/REPORT.md` §10. Reader- und Cross-
+> relevante L-Findings; semantic-seitige (L3-Hint, L8-URL, F31-Tombstone, V-Reste) referenzieren
+> das Sibling-Repo mcp-fedlex-semantic.
+
+| Nr | Finding (ein Satz) | Status |
+|---|---|---|
+| L7 | Input-verursachter SPARQL-400 als transienter Fehler → Endlos-Retry-Falle | 🟢 JoluxError::BadRequest (4xx) → InvalidArguments + Eingabe-Hint |
+| L1/V1 | search_law verfehlt woertlich passenden Titel bei truncated:false (row-multiplizierende OPTIONALs) | 🟢 innere DISTINCT-?ca-Subquery zaehlt Erlasse; ehrliches truncated; Relevanz-Ordnung (Abkuerzung zuerst) |
+| L2 | Semantic byte-gleiche Trefferlisten 2019/2021 (Coverage-Luecke) | 🟡 Signal via index_info.coverage-Note + Cross-Check-Pfad (semantic); tiefer Fix = Re-Ingest |
+| L3 | find_similar-Miss verschweigt Stichtags-Ursache | 🟢 «existiert, war zum Stichtag noch nicht in Kraft» (semantic) |
+| L8/V14 | find_similar lehnt volle Fedlex-URLs ab | 🟢 https-Praefix gestrippt (semantic) |
+| L5/V3 | Aufgehobener Erlass ohne as_of als kind=norm ohne Warnsignal | 🟢 provenance.repealed_since (CONS_Q holt dateNoLongerInForce im selben Round-Trip; nur bei Aufhebung <= as_of) |
+| L10/V28 | get_article_history-Caveat nur im Katalog, nicht in der Antwort | 🟢 data.completeness_note in der Antwort; Wurzel = Fedlex-Datenmodell 2023 (comment statt Artikel-Impact) |
+| L11 | list_versions genau 100 ohne total/truncated (Cap-Verdacht) | 🟢 Cap 200→500 (>> Maximum ~118); Beschreibung sagt «vollstaendig» |
+| L17/F31 | Tombstone-Chunks aufgehobener Artikel ohne Flag | 🟢 hit.repealed:true (Marker-Erkennung de/it/fr/rm, semantic) |
+| L18/V7 | max_chars/offset stille Koersion | 🟢 max_chars_applied/offset_applied ausgewiesen |
+| L21/V23 | search_law ohne total; resolve_sr_number ohne 0-Treffer-Hint | 🟢 truncated-Kontrakt dokumentiert (total bewusst nicht, F34); resolve_sr_number-0-Hint |
+| V25 | Semantic markiert Zukunfts-Stichtage nicht | 🟢 data.future_as_of (semantic) |
+| V27 | Cross-linguale Snippets ohne Sprach-Kennzeichnung | 🟢 data.snippet_language:de (semantic) |
+| V10 | Semantic-Treffer ohne Titel (deployed-but-inert) | 🟢 env-gated Titel-Backfill via Ingest-Diff (SEMANTIC_BACKFILL_TITLES=1); Betreiber-Trigger |
+| F8/V9 | index_info nennt keine Coverage/Frische | 🟡 coverage.note macht die Grenze explizit + Cross-Check; distinct-ELI/Frische-Metrik bewusst nicht (Status-Call) |
+| V17/V18/V21 | Schema-Luecken (as_of ohne format, Jargon, get_citations-Sprache) | 🟢 as_of format+pattern; Jargon-Glossar in instructions; get_citations-Sprachhinweis |
+| L15/V19 | Versionsverhandlung inkonsistent | ⚪ spec-konform (unterstuetzte Versionen geecht, unbekannte hochgestuft) |
+| L14 | Semantic-Auth je Transport verschieden kodiert | ⚪ bewusster Zwei-Transport-Kontrakt (rpc in-band / mcp 401) |
+| F21/F30/F22-Rest | schema-Duplikat, transaction_time-ISO, restliche descriptions | 🔴 offen: F21 bis Alt-Client-Migration; F30 gekoppelter fedlex-core-Bump; descriptions laufend |
