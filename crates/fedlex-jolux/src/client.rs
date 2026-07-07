@@ -99,6 +99,8 @@ pub struct MockSparqlClient {
     /// (z. B. `search_law` mit Kürzel-Vorabfrage).
     queued: Arc<Mutex<std::collections::VecDeque<SparqlResults>>>,
     queries: Arc<Mutex<Vec<String>>>,
+    /// Verify-L7: erzwingt einen Fehler statt einer Antwort (Fehlerpfad-Tests).
+    error: Option<JoluxError>,
 }
 
 impl MockSparqlClient {
@@ -108,7 +110,19 @@ impl MockSparqlClient {
             canned,
             queued: Arc::new(Mutex::new(std::collections::VecDeque::new())),
             queries: Arc::new(Mutex::new(Vec::new())),
+            error: None,
         }
+    }
+
+    /// Erzeugt einen Mock, der jede Query mit dem gegebenen Fehler abweist
+    /// (Verify-L7: Fehlerklassifikation testen).
+    pub fn from_error(error: JoluxError) -> Self {
+        let mut mock = Self::new(
+            SparqlResults::from_json(r#"{"head":{"vars":[]},"results":{"bindings":[]}}"#)
+                .expect("leeres Fixture"),
+        );
+        mock.error = Some(error);
+        mock
     }
 
     /// Erzeugt einen Mock aus einer JSON-Fixture.
@@ -152,6 +166,9 @@ impl SparqlClient for MockSparqlClient {
             .lock()
             .expect("lock not poisoned")
             .push(sparql.to_string());
+        if let Some(err) = &self.error {
+            return Err(err.clone());
+        }
         if let Some(next) = self.queued.lock().expect("lock not poisoned").pop_front() {
             return Ok(next);
         }

@@ -135,6 +135,8 @@ fn capped_list(key: &str, items: Vec<Value>, limit: u32) -> Value {
 fn map_jolux(err: JoluxError) -> ToolError {
     match err {
         JoluxError::NotFound(what) => ToolError::NotFound(what),
+        // Verify-L7: 4xx = permanenter Eingabefehler, kein transienter Ausfall.
+        JoluxError::BadRequest(_) => ToolError::InvalidArguments(err.to_string()),
         other => ToolError::Upstream(other.to_string()),
     }
 }
@@ -792,6 +794,41 @@ mod tests {
         // ehrlich weg (heutiger Status belegt keine historische Geltung).
         let eng1999 = hits.iter().find(|h| h["eli"] == "eli/cc/1999/27").unwrap();
         assert!(eng1999.get("in_force").is_none(), "{out}");
+    }
+
+    /// Verify-L7: Der SPARQL-Endpoint lehnt eine aus Sonderzeichen gebaute
+    /// Query mit 400 ab. Das ist ein permanenter Eingabefehler — der Hint
+    /// darf NICHT «spaeter erneut versuchen» sagen (Endlos-Retry-Falle).
+    #[tokio::test]
+    async fn sparql_bad_request_is_input_error_not_transient() {
+        use fedlex_jolux::JoluxError;
+        let mut reg = Registry::new();
+        register_discovery_tools(
+            &mut reg,
+            Arc::new(fedlex_jolux::MockSparqlClient::from_error(
+                JoluxError::BadRequest(400),
+            )),
+        );
+        let out = reg
+            .dispatch(
+                &ctx(Role::Navigator),
+                "search_law",
+                json!({ "query": "<script>alert(1)</script>" }),
+            )
+            .await;
+        assert!(
+            out["error"].as_str().unwrap().contains("invalid arguments"),
+            "{out}"
+        );
+        let hint = out["hint"].as_str().unwrap_or("");
+        assert!(
+            !hint.contains("spaeter erneut"),
+            "kein Transient-Hint: {hint}"
+        );
+        assert!(
+            hint.contains("zerbrechen") || hint.contains("neu"),
+            "Eingabe-Hint: {hint}"
+        );
     }
 
     #[tokio::test]

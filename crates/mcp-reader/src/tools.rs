@@ -126,6 +126,10 @@ fn arg_lang(args: &Value) -> Result<Language, ToolError> {
 fn map_bridge(err: BridgeError) -> ToolError {
     match err {
         BridgeError::Jolux(JoluxError::NotFound(what)) => ToolError::NotFound(what),
+        // Verify-L7: 4xx vom SPARQL-Endpoint = permanenter Eingabefehler.
+        BridgeError::Jolux(JoluxError::BadRequest(_)) => {
+            ToolError::InvalidArguments(err.to_string())
+        }
         other => ToolError::Upstream(other.to_string()),
     }
 }

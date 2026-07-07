@@ -65,11 +65,16 @@ impl SparqlClient for HttpSparqlClient {
             .send()
             .await
             .map_err(|e| JoluxError::Transport(e.to_string()))?;
-        if !resp.status().is_success() {
-            return Err(JoluxError::Transport(format!(
-                "HTTP {} vom Endpoint",
-                resp.status()
-            )));
+        let status = resp.status();
+        if !status.is_success() {
+            // Verify-L7: 4xx ist ein permanenter Query-/Eingabefehler (der
+            // Endpoint hat die aus Nutzer-Input gebaute Query abgelehnt) —
+            // NICHT transient. Nur 5xx/Netzfehler sind retry-würdig.
+            return Err(if status.is_client_error() {
+                JoluxError::BadRequest(status.as_u16())
+            } else {
+                JoluxError::Transport(format!("HTTP {status} vom Endpoint"))
+            });
         }
         let body = resp
             .text()

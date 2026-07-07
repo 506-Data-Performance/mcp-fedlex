@@ -125,6 +125,12 @@ impl ToolError {
             ToolError::InvalidArguments(what) if what.contains("expected prefix `eli/`") => {
                 "Das sieht nach einer SR-Nummer oder URL aus, nicht nach einem ELI. Loese SR-Nummern mit resolve_sr_number auf; aus vollen fedlex-URLs nimm den Teil ab `eli/`."
             }
+            // Verify-L7: der SPARQL-Endpoint lehnte die aus dem Argument
+            // gebaute Query ab — das ist ein Eingabefehler, KEIN transienter
+            // Ausfall; ein Retry mit demselben Argument scheitert wieder.
+            ToolError::InvalidArguments(what) if what.contains("SPARQL rejected") => {
+                "Der Suchbegriff enthaelt Zeichen, die die Abfrage zerbrechen (z. B. spitze Klammern, Anfuehrungszeichen). Formuliere ihn mit einfachen Woertern neu — ein Wiederholen mit demselben Wert scheitert erneut."
+            }
             ToolError::InvalidArguments(_) => {
                 "Pruefe die Argumente gegen das inputSchema des Tools und versuche es erneut."
             }

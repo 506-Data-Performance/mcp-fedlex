@@ -192,6 +192,8 @@ fn arg_type_uri(args: &Value) -> Result<Option<String>, ToolError> {
 fn map_jolux(err: JoluxError) -> ToolError {
     match err {
         JoluxError::NotFound(what) => ToolError::NotFound(what),
+        // Verify-L7: 4xx = permanenter Eingabefehler, kein transienter Ausfall.
+        JoluxError::BadRequest(_) => ToolError::InvalidArguments(err.to_string()),
         other => ToolError::Upstream(other.to_string()),
     }
 }
