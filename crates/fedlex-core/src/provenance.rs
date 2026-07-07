@@ -51,6 +51,16 @@ pub struct Provenance {
     /// nicht gibt. Optional und additiv (ältere Payloads/Consumer unberührt).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date_applicability: Option<String>,
+    /// Aufhebungsdatum (`jolux:dateNoLongerInForce`) des Erlasses, **sofern
+    /// er zum Stichtag bereits aufgehoben war** (Verify-L5/V3). Ohne dieses
+    /// Feld las sich ein aufgehobener Erlass, den man ohne `as_of` (also
+    /// heute) abfragt, als belastbarer `kind: norm` ohne jedes Warnsignal —
+    /// die gefährlichste Verwechslung des Explorer-Laufs. Gesetzt heisst:
+    /// «der Text ist die letzte Fassung, der Erlass gilt seit hier nicht
+    /// mehr» — hole für den heute geltenden Stand den Nachfolge-Erlass.
+    /// Optional und additiv (ältere Payloads/Consumer unberührt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repealed_since: Option<String>,
 }
 
 impl Provenance {
@@ -63,7 +73,16 @@ impl Provenance {
             transaction_time,
             kind: ProvenanceKind::Norm,
             date_applicability: None,
+            repealed_since: None,
         }
+    }
+
+    /// Trägt das Aufhebungsdatum nach, wenn der Erlass zum Stichtag bereits
+    /// aufgehoben war (Verify-L5). Builder — gesetzt in der Fassungs-Auflösung.
+    #[must_use]
+    pub fn with_repealed_since(mut self, date: impl Into<String>) -> Self {
+        self.repealed_since = Some(date.into());
+        self
     }
 
     /// Trägt das Stand-Datum der tatsächlich aufgelösten Fassung nach
@@ -84,6 +103,7 @@ impl Provenance {
             transaction_time,
             kind: ProvenanceKind::Hint,
             date_applicability: None,
+            repealed_since: None,
         }
     }
 

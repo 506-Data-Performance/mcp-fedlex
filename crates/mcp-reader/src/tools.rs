@@ -158,6 +158,10 @@ fn to_value<T: serde::Serialize>(data: T) -> Result<Value, ToolError> {
 /// Stichtagen) eine bestätigte Fassung, die es nicht gibt.
 fn with_fassung(mut prov: Provenance, doc_prov: &Provenance) -> Provenance {
     prov.date_applicability = doc_prov.date_applicability.clone();
+    // Verify-L5: Aufhebungssignal der aufgelösten Fassung mitnehmen, damit
+    // read_article/read_element einen aufgehobenen Erlass nicht als blanken
+    // kind=norm ausgeben.
+    prov.repealed_since = doc_prov.repealed_since.clone();
     prov
 }
 
@@ -219,7 +223,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Volltext eines Artikels eines Erlasses zum Stichtag (AKN-TXT-01).",
+            "description": "Volltext eines Artikels eines Erlasses zum Stichtag (AKN-TXT-01). Ist der Erlass zum Stichtag aufgehoben, traegt provenance.repealed_since das Aufhebungsdatum — der Text ist dann die letzte Fassung, nicht geltendes Recht (Verify-L5).",
             "properties": {
                 "eli": { "type": "string", "description": "Work-ELI, z.B. eli/cc/2017/762" },
                 "eid": { "type": "string", "description": "Artikel-eId, z.B. art_1" },

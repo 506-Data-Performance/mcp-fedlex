@@ -22,7 +22,12 @@ pub struct Consolidation {
     pub language: String,
 }
 
-const CONS_Q: &str = r#"SELECT ?cons ?date ?url WHERE {
+// Verify-L5: `?repealed` (dateNoLongerInForce des Erlasses) fällt im SELBEN
+// Round-Trip ab — kein zusätzlicher Query auf dem Hot-Read-Pfad. Damit weiss
+// read_article/resolve_consolidation_at, ob der gelieferte Text die letzte
+// Fassung eines aufgehobenen Erlasses ist.
+const CONS_Q: &str = r#"SELECT ?cons ?date ?url ?repealed WHERE {
+  OPTIONAL { <__URI__> jolux:dateNoLongerInForce ?repealed }
   ?cons jolux:isMemberOf <__URI__> ;
         jolux:dateApplicability ?date ;
         jolux:isRealizedBy ?expr .
@@ -72,8 +77,17 @@ pub async fn resolve_consolidation_at(
     // Die Provenance weist die tatsächlich aufgelöste Fassung aus — der
     // Stichtag allein suggeriert sonst eine Konsolidierung, die es (etwa bei
     // künftigen Stichtagen) nicht gibt.
-    let prov = Provenance::new(eli.clone(), as_of, TransactionTime::now())
+    let mut prov = Provenance::new(eli.clone(), as_of, TransactionTime::now())
         .with_date_applicability(cons.date_applicability.clone());
+    // Verify-L5: Nur flaggen, wenn der Erlass ZUM STICHTAG bereits aufgehoben
+    // war (dateNoLongerInForce <= as_of). Ein künftiges Aufhebungsdatum lässt
+    // den Erlass am Stichtag noch gelten — dann kein Warnsignal.
+    if let Some(repealed) = val(b, "repealed").map(str::to_string) {
+        // ISO-Datums-Strings vergleichen lexikografisch korrekt.
+        if repealed.as_str() <= as_of.to_string().as_str() {
+            prov = prov.with_repealed_since(repealed);
+        }
+    }
     Ok(Response::new(cons, prov))
 }
 
@@ -266,6 +280,52 @@ mod tests {
         "url": {"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/2017/762/20230601/de/xml/fedlex-data-admin-ch-eli-cc-2017-762-20230601-de-xml.xml"}
       }]}
     }"#;
+
+    /// Verify-L5: Ein aufgehobener Erlass, heute (nach Aufhebung) gelesen,
+    /// traegt repealed_since — der letzte Text ist dann kein blanker Beleg.
+    /// Ein KUENFTIGES Aufhebungsdatum flaggt NICHT (am Stichtag gilt er noch).
+    #[tokio::test]
+    async fn repealed_act_carries_repeal_date_only_when_past() {
+        let fixture = |repealed: &str| {
+            format!(
+                r#"{{"head":{{"vars":["cons","date","url","repealed"]}},"results":{{"bindings":[{{
+                  "cons":{{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1993/1945/consolidation/20190301"}},
+                  "date":{{"type":"literal","value":"2019-03-01"}},
+                  "url":{{"type":"uri","value":"https://fedlex.data.admin.ch/eli/cc/1993/1945/20190301/de/xml/x.xml"}},
+                  "repealed":{{"type":"literal","value":"{repealed}"}}
+                }}]}}}}"#
+            )
+        };
+        let eli = Eli::new("eli/cc/1993/1945").unwrap();
+        // Aufhebung 2023 liegt VOR dem Stichtag 2026 -> geflaggt.
+        let past = MockSparqlClient::from_json(&fixture("2023-09-01"));
+        let r = resolve_consolidation_at(
+            &past,
+            &eli,
+            ValidAsOf::new(date!(2026 - 07 - 07)),
+            Language::De,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.provenance().repealed_since.as_deref(), Some("2023-09-01"));
+        // Derselbe Erlass an einem Stichtag VOR der Aufhebung -> kein Flag.
+        let before = MockSparqlClient::from_json(&fixture("2023-09-01"));
+        let r2 = resolve_consolidation_at(
+            &before,
+            &eli,
+            ValidAsOf::new(date!(2020 - 01 - 01)),
+            Language::De,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r2.provenance().repealed_since, None);
+        // Query holt das Aufhebungsdatum im selben Round-Trip.
+        assert!(
+            past.last_query()
+                .unwrap()
+                .contains("jolux:dateNoLongerInForce ?repealed")
+        );
+    }
 
     #[tokio::test]
     async fn resolves_version_at_stichtag_with_filter_and_language() {
