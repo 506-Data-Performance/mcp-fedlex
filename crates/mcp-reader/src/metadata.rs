@@ -477,7 +477,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet formale Zitationen eines Erlasses (JLX-CIT-01), dedupliziert nach Quellgesetz. Richtung: outgoing (was die zum Stichtag anwendbare Fassung zitiert), incoming (wer diesen Erlass in irgendeiner erfassten Fassung zitiert), both (Default). NUR Gesamttext-Granularitaet, nie Artikel-Ebene; fuer vollstaendige Zitationsnetze JOLux mit AKN-Inline-Refs mergen. Liefert einen BELEG (kind=norm).",
+            "description": "Listet formale Zitationen eines Erlasses (JLX-CIT-01), dedupliziert nach Quellgesetz. from/to sind ELIs (sprachneutral); das description-Feld ist die von Fedlex gefuehrte Fundstellen-Angabe in der QUELLSPRACHE des zitierenden Erlasses, nicht lokalisierbar (daher kein lang-Parameter — Verify-V21). Richtung: outgoing (was die zum Stichtag anwendbare Fassung zitiert), incoming (wer diesen Erlass in irgendeiner erfassten Fassung zitiert), both (Default). NUR Gesamttext-Granularitaet, nie Artikel-Ebene; fuer vollstaendige Zitationsnetze JOLux mit AKN-Inline-Refs mergen. Liefert einen BELEG (kind=norm).",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" },
                 "direction": { "type": "string", "enum": ["outgoing", "incoming", "both"], "default": "both" }

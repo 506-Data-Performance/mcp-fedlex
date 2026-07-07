@@ -280,7 +280,16 @@ where
             .map_err(map_jolux)?;
         let annotated: Vec<Value> = hits.into_iter().filter_map(|h| to_value(h).ok()).collect();
         let prov = query_hint(ctx, "eli/cc")?;
-        Ok(Response::new(json!({ "hits": annotated }), prov))
+        let mut data = json!({ "hits": annotated });
+        // Verify-V23: Leere Trefferliste liess den Agenten ohne Wegweiser
+        // (search_law hat den Hint seit F-5) — jetzt gleichgezogen.
+        if data["hits"].as_array().is_some_and(Vec::is_empty) {
+            data["hint"] = json!(
+                "Keine Erlasse zu dieser SR-Nummer. Pruefe die Nummer (Punkt-Notation, z.B. 235.1); \
+                 fuer Staatsvertraege beginnt sie mit 0. (0.…). Kennst du nur den Titel, nutze search_law."
+            );
+        }
+        Ok(Response::new(data, prov))
     }
 }
 

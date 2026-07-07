@@ -250,7 +250,9 @@ get_structure/search_text orientieren → gezielt read_article/read_element lese
 AS-Publikationen `eli/oc/…`; Element-IDs (eid) die Form `art_19` bzw. \
 `art_19/para_2`. Zeitpunktgenau: setze `as_of` (JJJJ-MM-TT) als Argument — ohne \
 `as_of` gilt das heutige Datum (Schweizer Zeit); das effektiv verwendete Datum steht \
-immer in provenance.valid_as_of. Fehler kommen in-band als {error, hint} — folge dem hint.";
+immer in provenance.valid_as_of. Kuerzel in Feldern/Codes: CA = Consolidation Abstract \
+(ein Erlass), JLX-*/AKN-* = interne Lexikon-Kennungen der Fundstelle (kannst du ignorieren). \
+Fehler kommen in-band als {error, hint} — folge dem hint.";
 
 /// Der zustandslose MCP-Dienst. Bündelt Registry, Auth, Quota und Temporal.
 pub struct McpService<A: AuthResolver, B: QuotaBackend> {
