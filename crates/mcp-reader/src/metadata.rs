@@ -427,7 +427,7 @@ where
     fn schema(&self) -> Value {
         json!({
             "type": "object",
-            "description": "Listet die Aenderungen, die auf einen EINZELNEN Artikel eines Erlasses gewirkt haben (JLX-IMP-02). Beide eid-Schreibweisen werden akzeptiert — kanonisch ist die AKN-Form mit Unterstrich (art_14_a, wie read_element); die JOLux-Seite (art_14a) normalisiert der Server selbst. Caveat (wie get_impacts): seit 2023 oft nur im Freitext-`comment` des Gesamterlass-Impacts - leere Liste ist KEIN Beweis fuer 'nie geaendert'. Liefert einen BELEG (kind=norm).",
+            "description": "Listet die Aenderungen, die auf einen EINZELNEN Artikel eines Erlasses gewirkt haben (JLX-IMP-02). Antwort: {impacts: [...], completeness_note}. Beide eid-Schreibweisen werden akzeptiert — kanonisch ist die AKN-Form mit Unterstrich (art_14_a, wie read_element); die JOLux-Seite (art_14a) normalisiert der Server selbst. Caveat auch in der Antwort (completeness_note): seit 2023 oft nur im Freitext-`comment` des Gesamterlass-Impacts - weder leere noch nicht-leere Liste beweist Vollstaendigkeit. Liefert einen BELEG (kind=norm).",
             "properties": {
                 "eli": { "type": "string", "description": "ELI des Erlasses, z.B. eli/cc/2017/762" },
                 "eid": { "type": "string", "description": "eID des Artikels, z.B. art_14_a oder art_2_b/para_1 (JOLux-Kurzform art_14a wird ebenfalls akzeptiert)" }
@@ -441,7 +441,20 @@ where
         let resp = get_article_history(self.client.as_ref(), &eli, &eid, ctx.stamp.valid_as_of())
             .await
             .map_err(map_jolux)?;
-        into_value_response(resp)
+        // Verify-L10/V28: Der Unvollstaendigkeits-Caveat stand nur im Katalog —
+        // eine NICHT-leere Antwort wirkte damit vollstaendig. Er wandert jetzt
+        // in die Antwort selbst: nach dem Fedlex-Systembruch 2023 werden
+        // Aenderungen oft nur im Freitext-comment des Gesamterlass-Impacts
+        // gefuehrt (J6.4), nicht als Artikel-Impact — die Liste kann also auch
+        // dann unvollstaendig sein, wenn sie Eintraege hat.
+        let (impacts, prov) = resp.into_parts();
+        let impacts_val = serde_json::to_value(impacts)
+            .map_err(|e| ToolError::Upstream(format!("serialize: {e}")))?;
+        let data = json!({
+            "impacts": impacts_val,
+            "completeness_note": "Kann unvollstaendig sein: seit dem Fedlex-Systembruch 2023 stehen Aenderungen oft nur im Freitext-`comment` des Gesamterlass-Impacts, nicht als Artikel-Impact. Ergaenzend get_impacts auf den Erlass aufrufen und dessen comment pruefen.",
+        });
+        Ok(Response::new(data, prov))
     }
 }
 
@@ -1158,6 +1171,17 @@ mod tests {
         assert!(out.get("error").is_none(), "unerwarteter Fehler: {out}");
         assert_eq!(out["provenance"]["kind"], "norm");
         assert_eq!(out["provenance"]["eli"], "eli/cc/2017/762");
+        // Verify-L10: Antwort wrappt impacts + completeness_note.
+        assert!(
+            out["data"]["impacts"].is_array(),
+            "impacts-Array fehlt: {out}"
+        );
+        assert!(
+            out["data"]["completeness_note"]
+                .as_str()
+                .is_some_and(|n| n.contains("get_impacts")),
+            "completeness_note fehlt: {out}"
+        );
         // J18.2: art_14_a wird zu art_14a normalisiert (im SPARQL-Query sichtbar).
         let q = client.last_query().expect("query gestellt");
         assert!(q.contains("art_14a"), "eID nicht normalisiert: {q}");
