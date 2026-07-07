@@ -47,27 +47,43 @@ pub struct LawHit {
 // `titleAlternative` matcht zusätzlich Volksnamen wie «Arbeitsgesetz», die im
 // amtlichen Langtitel gar nicht vorkommen (68 §F-4); BOUND-Guard, damit die
 // OPTIONAL-Variable die Fehler-Semantik des FILTER nicht kippt.
-const SEARCH_Q: &str = r#"SELECT DISTINCT ?ca ?sr ?title ?short ?status ?entry ?noLonger ?endApp WHERE {
-  ?ca a jolux:ConsolidationAbstract ;
-      jolux:isRealizedBy ?expr .
+//
+// Verify-L1/V1: Das LIMIT läuft über eine INNERE `SELECT ?ca … GROUP BY ?ca`-
+// Subquery, damit es DISTINKTE Erlasse zählt, nicht die von den äusseren
+// OPTIONALs (Status/mehrere Datumsfelder) aufgeblähten Rohzeilen. Vorher
+// füllten die Duplikat-Zeilen weniger Erlasse das LIMIT-Fenster, Erlasse mit
+// wörtlich passendem Titel fielen heraus UND `truncated` log (=false trotz
+// weiterer Treffer). `ORDER BY DESC(COUNT(DISTINCT ?fshort)) ?ca` schiebt Erlasse MIT
+// amtlicher Abkürzung (Gesetze/Verordnungen) vor titel-lose Staatsverträge —
+// eine billige, ehrliche Relevanz-Ordnung; `?ca` als Tiebreak macht die
+// Paginierung deterministisch.
+const SEARCH_Q: &str = r#"SELECT ?ca ?sr ?title ?short ?status ?entry ?noLonger ?endApp WHERE {
+  { SELECT ?ca WHERE {
+      ?ca a jolux:ConsolidationAbstract ;
+          jolux:isRealizedBy ?fexpr .
+      ?fexpr jolux:language <__LANGURI__> ;
+             jolux:title ?ftitle .
+      OPTIONAL { ?fexpr jolux:titleShort ?fshort }
+      OPTIONAL { ?fexpr jolux:titleAlternative ?falt }
+      FILTER(
+        CONTAINS(LCASE(STR(?ftitle)), LCASE("__QUERY__")) ||
+        CONTAINS(LCASE(STR(?ftitle)), LCASE("__QUERY2__")) ||
+        (BOUND(?falt) && (
+          CONTAINS(LCASE(STR(?falt)), LCASE("__QUERY__")) ||
+          CONTAINS(LCASE(STR(?falt)), LCASE("__QUERY2__"))
+        ))
+      )
+    } GROUP BY ?ca ORDER BY DESC(COUNT(DISTINCT ?fshort)) ?ca LIMIT __LIMIT__ OFFSET __OFFSET__ }
+  ?ca jolux:isRealizedBy ?expr .
   ?expr jolux:language <__LANGURI__> ;
         jolux:title ?title .
   OPTIONAL { ?expr jolux:titleShort ?short }
-  OPTIONAL { ?expr jolux:titleAlternative ?alt }
   OPTIONAL { ?ca jolux:historicalLegalId ?sr }
   OPTIONAL { ?ca jolux:inForceStatus ?status }
   OPTIONAL { ?ca jolux:dateEntryInForce ?entry }
   OPTIONAL { ?ca jolux:dateNoLongerInForce ?noLonger }
   OPTIONAL { ?ca jolux:dateEndApplicability ?endApp }
-  FILTER(
-    CONTAINS(LCASE(STR(?title)), LCASE("__QUERY__")) ||
-    CONTAINS(LCASE(STR(?title)), LCASE("__QUERY2__")) ||
-    (BOUND(?alt) && (
-      CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY__")) ||
-      CONTAINS(LCASE(STR(?alt)), LCASE("__QUERY2__"))
-    ))
-  )
-} LIMIT __LIMIT__ OFFSET __OFFSET__"#;
+}"#;
 
 // Exakte Kürzel-Auflösung über die amtliche Abkürzung (68 §F-4). Eigene,
 // billige Vorabfrage (~0.4 s live) statt OR im Haupt-FILTER: dort verdrängte
@@ -448,7 +464,7 @@ mod tests {
         assert_eq!(qs.len(), 2);
         assert!(qs[0].contains("jolux:titleShort ?short ."));
         assert!(qs[0].contains(r#"LCASE(STR(?short)) = LCASE("OR")"#));
-        assert!(qs[1].contains("CONTAINS(LCASE(STR(?title))"));
+        assert!(qs[1].contains("CONTAINS(LCASE(STR(?ftitle))"));
     }
 
     /// 68 §F-9: offset landet in der Substring-Query; die Kürzel-Vorabfrage
@@ -480,7 +496,7 @@ mod tests {
         .unwrap();
         assert_eq!(client.queries().len(), 1);
         // Volksnamen matchen zusätzlich über titleAlternative.
-        assert!(client.queries()[0].contains("jolux:titleAlternative ?alt"));
+        assert!(client.queries()[0].contains("jolux:titleAlternative ?falt"));
     }
 
     /// 68 §F-1 (Explorer-Blocker): Neue Konsolidierungen ohne SR-Literal
