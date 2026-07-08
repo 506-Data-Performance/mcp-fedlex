@@ -8,7 +8,7 @@
 #
 # Dies ist ein ENTWICKLUNGS-Setup: Redis spricht Klartext im internen
 # compose-Netz, Auth läuft über MCP_DEV_TOKEN. Für Produktion siehe
-# docs/80_DEPLOY.md (Kubernetes, JWT/JWKS, Redis-mTLS).
+# docs/dev/80_DEPLOY.md (Kubernetes, JWT/JWKS, Redis-mTLS).
 
 services:
   redis:

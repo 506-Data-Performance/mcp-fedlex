@@ -36,7 +36,7 @@ npx -y @modelcontextprotocol/inspector --config inspector.json --server fedlex
 - **fedlex-core** — geteilte Kern-Typen; kodiert die schicht­übergreifenden Invarianten.
 - **fedlex-store** — Data-Access-Layer, Tenant-Isolation (ADR-001).
 - **fedlex-jolux** — getestete, komponierbare JOLux-SPARQL-Primitive (Metadaten/Graph); geht **live** ans öffentliche Fedlex-Endpoint.
-- **fedlex-akn** — AKN-4.0-Lexikon als Funktionen (20 Primitive, `docs/11_LEXICON_akn.md`); lokale Navigation im Akt-Volltext.
+- **fedlex-akn** — AKN-4.0-Lexikon als Funktionen (20 Primitive, `docs/dev/11_LEXICON_akn.md`); lokale Navigation im Akt-Volltext.
 - **fedlex-bridge** — produktiver Pfad JOLux (Metadaten) → AKN (Volltext); bewusst **transportfrei**.
 - **fedlex-telemetry** — PII-Scrubber + `Sensitive`-Typen (Compliance-Gate); das Laufzeit-Logging (`tracing`, `RUST_LOG`/`MCP_LOG_FORMAT`) lebt im mcp-reader.
 - **mcp-reader** — das Binary: zustandsloser MCP-Reader (CQRS-Leseseite); Auth/RBAC, verteilte Quota, HTTP-Routen `/mcp` · `/rpc` · `/sse`.
@@ -52,16 +52,17 @@ npx -y @modelcontextprotocol/inspector --config inspector.json --server fedlex
 - Domänen-Crates bleiben **transportfrei** (client/WASM- wie serverseitig nutzbar).
 - **SPARQL WAF-sicher**: kein «from» (Variable/Prädikat) in langen Queries — die
   Fedlex-WAF blockt das SQL-Injection-Muster «SELECT … from» ab ~600 Zeichen
-  (Betriebsregel + Autoren-Regeln: `docs/10_LEXICON_jolux.md` §Betriebsregel WAF;
+  (Betriebsregel + Autoren-Regeln: `docs/dev/10_LEXICON_jolux.md` §Betriebsregel WAF;
   Wächter: `waf_guard_main_queries_avoid_from`).
 
 ## Wo was liegt
 
+- Doku-Index (Verständnis- vs. Dev-Doku): `docs/README.md` · Verständnis-Handbuch (laienverständlich, PDF-exportierbar, de+en): `docs/handbuch/`
 - Code: `crates/` · Architektur-Plan: `likec4/`
-- Lexika & Pläne: `docs/` (`10_LEXICON_jolux`, `11_LEXICON_akn`, `30_PLAN`, `45_GAP_ANALYSIS`, `50_ROADMAP_TO_PERFECT`)
-- Entscheidungen: `docs/adr/` (ADR-001 … ADR-010)
-- Betrieb/Config: `docs/70_CONFIG.md` (alle Env-Vars), `docs/80_DEPLOY.md`, `docs/90_AUTH_AND_ROLES.md`
-- Lebende Review-Register: `docs/65_REVIEW_FINDINGS.md` (Code), `docs/66_WEB_REVIEW_FINDINGS.md` (Website), `docs/68_AGENT_UX_FINDINGS.md` (Agent-UX/Dogfooding)
+- Lexika & Pläne: `docs/dev/` (`10_LEXICON_jolux`, `11_LEXICON_akn`, `30_PLAN`, `45_GAP_ANALYSIS`, `50_ROADMAP_TO_PERFECT`)
+- Entscheidungen: `docs/dev/adr/` (ADR-001 … ADR-010)
+- Betrieb/Config: `docs/dev/70_CONFIG.md` (alle Env-Vars), `docs/dev/80_DEPLOY.md`, `docs/dev/90_AUTH_AND_ROLES.md`
+- Lebende Review-Register: `docs/dev/65_REVIEW_FINDINGS.md` (Code), `docs/dev/66_WEB_REVIEW_FINDINGS.md` (Website), `docs/dev/68_AGENT_UX_FINDINGS.md` (Agent-UX/Dogfooding)
 - Dev-Anleitung (maßgeblich): `CONTRIBUTING.md`
 
 ## Konventionen

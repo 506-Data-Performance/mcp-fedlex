@@ -92,7 +92,7 @@ jobs:
                 `- Ausgelöst durch: \`${context.eventName}\``,
                 `- Commit: \`${context.sha.substring(0, 8)}\``,
                 ``,
-                `**Triage-Reihenfolge** (siehe \`docs/45_GAP_ANALYSIS.md\` §G-5):`,
+                `**Triage-Reihenfolge** (siehe \`docs/dev/45_GAP_ANALYSIS.md\` §G-5):`,
                 `1. Zuerst den Bund verdächtigen: Endpunkt-/WAF-/Datenform-Änderung?`,
                 `2. Fehlende Suite identifizieren (JOLux / AKN / Bridge) am roten Step.`,
                 `3. Erst danach den eigenen Code/das Lexikon (10/11_LEXICON) prüfen.`,

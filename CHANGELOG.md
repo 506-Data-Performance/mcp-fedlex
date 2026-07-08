@@ -309,7 +309,7 @@ abgeschlossen). Der Konsumenten-Vertrag bleibt additiv: bestehende Clients
   auf den Vorgänger (k3-infra `reader.yaml`). Live verifiziert (port-forward,
   Navigator-JWT): Default & zu neue Client-Version → `2025-11-25`, Client mit
   `2024-11-05` → exakt `2024-11-05`. Spec-Grundlage: ADR-008 §A, Runbook
-  `docs/55_MIGRATION_mcp_protocol_upgrade.md`.
+  `docs/dev/55_MIGRATION_mcp_protocol_upgrade.md`.
 
 - **Input-Validation `2025-11-25`-konform**: beide `tools/call`-Pfade (fehlender
   `name`, ungültiges `as_of`) liefern jetzt einen in-band Tool-Execution-Error
@@ -356,8 +356,8 @@ Fedlex live-konform getestet.
 - **Datenschicht**: jolux- (29) + akn- (12) + bridge- (3) Live-Konformanztests,
   wöchentlich in CI.
 - **Onboarding/Betrieb**: `docker-compose.yml`, `.env.example`, Quickstart-README,
-  `docs/70_CONFIG.md`, `scripts/smoke.sh`, `docs/80_DEPLOY.md` (k8s + Runbook),
-  `docs/90_AUTH_AND_ROLES.md`, `CONTRIBUTING.md`, `SECURITY.md`.
+  `docs/dev/70_CONFIG.md`, `scripts/smoke.sh`, `docs/dev/80_DEPLOY.md` (k8s + Runbook),
+  `docs/dev/90_AUTH_AND_ROLES.md`, `CONTRIBUTING.md`, `SECURITY.md`.
 - **Distroless-Image** (nonroot, UID 65532), per Kaniko gebaut.
 
 [Unreleased]: https://git.mindful-server.com/mindful-bio/mcp-fedlex/-/compare/v0.1.0...main

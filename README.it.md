@@ -1,7 +1,7 @@
 # mcp-fedlex
 
 [![Release](https://img.shields.io/badge/release-v0.2.0-green.svg)](./CHANGELOG.md)
-[![MCP](https://img.shields.io/badge/MCP-2025--11--25-blue.svg)](./docs/adr/ADR-008-mcp-protocol-version-upgrade.md)
+[![MCP](https://img.shields.io/badge/MCP-2025--11--25-blue.svg)](./docs/dev/adr/ADR-008-mcp-protocol-version-upgrade.md)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-edition%202024-orange.svg)](./Cargo.toml)
 
@@ -195,13 +195,13 @@ Il container ascolta sempre su `8080`; `MCP_HOST_PORT` rimappa solo il lato host
 
 L'intera configurazione passa per variabili d'ambiente. Riferimento completo con
 valori predefiniti e campi obbligatori:
-**[`docs/70_CONFIG.md`](./docs/70_CONFIG.md)**. Il modello di ruoli e token
+**[`docs/dev/70_CONFIG.md`](./docs/dev/70_CONFIG.md)**. Il modello di ruoli e token
 (token di dev vs. JWT/JWKS) è in
-**[`docs/90_AUTH_AND_ROLES.md`](./docs/90_AUTH_AND_ROLES.md)**.
+**[`docs/dev/90_AUTH_AND_ROLES.md`](./docs/dev/90_AUTH_AND_ROLES.md)**.
 
 > La configurazione Compose è pensata per lo **sviluppo** (Redis in chiaro, token
 > di dev statico). Esercizio in produzione su Kubernetes (JWT/JWKS, Redis mTLS,
-> SealedSecrets): **[`docs/80_DEPLOY.md`](./docs/80_DEPLOY.md)**.
+> SealedSecrets): **[`docs/dev/80_DEPLOY.md`](./docs/dev/80_DEPLOY.md)**.
 
 ## Ottenere un'immagine versionata
 
@@ -234,12 +234,13 @@ cargo test  --workspace -- --ignored      # conformità in tempo reale contro Fe
 
 ## Architettura & decisioni
 
+- **Manuale divulgativo** (tedesco/inglese; tutti i 40 strumenti, FAQ, glossario; esportabile in PDF): [Deutsch](./docs/handbuch/HANDBUCH.de.md) · [English](./docs/handbuch/HANDBUCH.en.md) · indice della documentazione: [`docs/README.md`](./docs/README.md)
 - Piano di architettura LikeC4: [`likec4/`](./likec4)
-- Lessico delle capacità (spazio funzionale JOLux): [`docs/10_LEXICON_jolux.md`](./docs/10_LEXICON_jolux.md)
-- Piano di realizzazione & checklist: [`docs/30_PLAN.md`](./docs/30_PLAN.md)
-- Punti aperti & usabilità: [`docs/60_OPEN_ITEMS_AND_USABILITY.md`](./docs/60_OPEN_ITEMS_AND_USABILITY.md)
-- Esiti delle revisioni (registro vivo): [`docs/65_REVIEW_FINDINGS.md`](./docs/65_REVIEW_FINDINGS.md)
-- Architecture Decision Records: [`docs/adr/`](./docs/adr)
+- Lessico delle capacità (spazio funzionale JOLux): [`docs/dev/10_LEXICON_jolux.md`](./docs/dev/10_LEXICON_jolux.md)
+- Piano di realizzazione & checklist: [`docs/dev/30_PLAN.md`](./docs/dev/30_PLAN.md)
+- Punti aperti & usabilità: [`docs/dev/60_OPEN_ITEMS_AND_USABILITY.md`](./docs/dev/60_OPEN_ITEMS_AND_USABILITY.md)
+- Esiti delle revisioni (registro vivo): [`docs/dev/65_REVIEW_FINDINGS.md`](./docs/dev/65_REVIEW_FINDINGS.md)
+- Architecture Decision Records: [`docs/dev/adr/`](./docs/dev/adr)
 - Contribuire: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Sicurezza: [`SECURITY.md`](./SECURITY.md)
 
 ## Ecosistema

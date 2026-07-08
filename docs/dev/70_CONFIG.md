@@ -54,7 +54,7 @@ Der `initialize`-Handshake handelt die MCP-Protokollversion aus. Nennt der Clien
 Default-Version; nennt er eine **unbekannte/zu neue**, antwortet der Reader spec-konform mit seiner
 höchsten unterstützten (kein harter Fehler). Unterstützt sind `2025-11-25` (Default, live seit
 2026-06-20) und `2024-11-05` (Legacy, nur auf explizite Anfrage) — Migration abgeschlossen,
-s. `docs/55_MIGRATION_mcp_protocol_upgrade.md` und ADR-008.
+s. `docs/dev/55_MIGRATION_mcp_protocol_upgrade.md` und ADR-008.
 
 | Variable | Pflicht | Default | Beschreibung |
 | --- | --- | --- | --- |
@@ -81,7 +81,7 @@ jeder Aufruf endet mit `-32001 missing/invalid credential`. Die Auswahl erfolgt 
 | `MCP_JWT_RS256_PUBKEY_FILE` | nein | — | Pfad zu einer PEM-Datei mit RSA-Public-Key (RS256). |
 | `MCP_DEV_TOKEN` | nein | — | Statisches Bearer-Token für die lokale Entwicklung. **Nicht in Produktion.** |
 
-> Rollenmodell und Claims-Schema (`role`/`tenant`/`session`): siehe `docs/90_AUTH_AND_ROLES.md`.
+> Rollenmodell und Claims-Schema (`role`/`tenant`/`session`): siehe `docs/dev/90_AUTH_AND_ROLES.md`.
 
 ## 3. Redis-mTLS (optional, Produktion · ADR-005)
 

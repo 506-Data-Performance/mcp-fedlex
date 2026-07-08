@@ -10,7 +10,7 @@
 - **Ziel-Revision:** **`2025-11-25`** (höchste stabile MCP-Spec-Revision; `2025-06-18` ist als Ziel ausgeschlossen)
 - **Folge-Release:** Ziel `v0.2.0` (siehe `CHANGELOG.md`)
 
-- **Operatives Runbook:** [`docs/55_MIGRATION_mcp_protocol_upgrade.md`](../55_MIGRATION_mcp_protocol_upgrade.md)
+- **Operatives Runbook:** [`docs/dev/55_MIGRATION_mcp_protocol_upgrade.md`](../55_MIGRATION_mcp_protocol_upgrade.md)
   — Phasen 0–9 mit Gates & Rollback je Schritt (extrem-vorsichtige Ausführung)
 
 

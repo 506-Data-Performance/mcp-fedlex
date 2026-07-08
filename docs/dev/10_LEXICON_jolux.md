@@ -11,7 +11,7 @@
 > **Quellen (Ground Truth).**
 > - Ontologie-Referenz: `fedlex-RAG-evaluation/macro-graphRAG-fedlex/fedlex-jolux/doc/reference.md`
 > - Empirisches Rulebook J0–J20: `fedlex-RAG-evaluation/data_understanding/jolux/rulebook_jolux.md`
-> - Implementierungs-Spec: `../../analyse-fedlex/10_DATA_RULES_jolux.md`
+> - Implementierungs-Spec: `../../../analyse-fedlex/10_DATA_RULES_jolux.md`
 >
 > **Pendant.** Der AKN-Funktionsraum (Volltext/Struktur) steht in `11_LEXICON_akn.md`. JOLux liefert Metadaten, niemals Gesetzestext (J0.1).
 
@@ -522,7 +522,7 @@ Drei Kompositions-Invarianten für Skill-Autoren:
 ## Konformanz-Suite (der Test-Ort)
 
 Dieses Lexikon ist **ausführbar spezifiziert**. Jeder Eintrag hat einen Live-Test in
-[`crates/fedlex-jolux/tests/lexicon_conformance.rs`](../crates/fedlex-jolux/tests/lexicon_conformance.rs)
+[`crates/fedlex-jolux/tests/lexicon_conformance.rs`](../../crates/fedlex-jolux/tests/lexicon_conformance.rs)
 (ein Test pro JLX-ID plus Phantom-Audits für die Ausschlussliste).
 
 ```sh

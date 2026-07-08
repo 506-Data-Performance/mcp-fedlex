@@ -46,8 +46,9 @@ LLM einen fremden Tool-Namen errät.
 
 \* `LodFederation` und `Workspace` sind im Code **deklariert, aber unbestückt** (kein
 `register`-Aufruf in `main.rs`) — reserviert für künftige Tools. Deshalb sprechen README,
-CLAUDE.md und die Website konsistent von **«25 Tools über vier aktive Pools»**; diese
-Tabelle listet alle sechs `ToolPool`-Varianten (`crates/mcp-reader/src/tool.rs`).
+CLAUDE.md und die Website konsistent von **«40 Tools über vier aktive Pools»** (seit
+ADR-010; zuvor 25); diese Tabelle listet alle sechs `ToolPool`-Varianten
+(`crates/mcp-reader/src/tool.rs`).
 
 > **ansV läuft mit der Rolle `Navigator`** — Discovery und JOLux-Metadaten erlaubt,
 > Validierungs-Tools nicht.

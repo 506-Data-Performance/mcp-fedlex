@@ -7,7 +7,7 @@ assignees: []
 ---
 
 > **Leitlinie:** Dieser Server projiziert bewusst **nur belegbaren Bedarf** auf Tools
-> (siehe `docs/50_ROADMAP_TO_PERFECT.md §Nicht-Ziele` und `docs/45_GAP_ANALYSIS.md`).
+> (siehe `docs/dev/50_ROADMAP_TO_PERFECT.md §Nicht-Ziele` und `docs/dev/45_GAP_ANALYSIS.md`).
 > Vorschläge „auf Verdacht" werden eher abgelehnt als aufgenommen.
 
 ## Problem / Bedarf

@@ -2,7 +2,7 @@
 //!
 //! Offline-CI-Test, der den letzten offenen Punkt aus `45_GAP_ANALYSIS.md` (G-4)
 //! und das letzte Akzeptanzkriterium aus `adr/ADR-007-…md` (Z. 108–110) schliesst:
-//! **Jedes** im Lexikon (`docs/10_LEXICON_jolux.md`, `docs/11_LEXICON_akn.md`)
+//! **Jedes** im Lexikon (`docs/dev/10_LEXICON_jolux.md`, `docs/dev/11_LEXICON_akn.md`)
 //! dokumentierte Primitiv ist genau einem Zustand zugeordnet —
 //! **`Projected`** (als MCP-Tool registriert) **oder** **`Excluded`** (begründeter
 //! Ausschluss).
@@ -240,8 +240,8 @@ fn lexicon_entries() -> Vec<(String, String)> {
     let re = Regex::new(r"(?m)^### ((?:JLX|AKN)-[A-Z]+-[0-9]+) · ([a-z_]+)").expect("valid regex");
     let mut entries = Vec::new();
     for rel in [
-        "/../../docs/10_LEXICON_jolux.md",
-        "/../../docs/11_LEXICON_akn.md",
+        "/../../docs/dev/10_LEXICON_jolux.md",
+        "/../../docs/dev/11_LEXICON_akn.md",
     ] {
         let path = format!("{root}{rel}");
         let content = std::fs::read_to_string(&path)

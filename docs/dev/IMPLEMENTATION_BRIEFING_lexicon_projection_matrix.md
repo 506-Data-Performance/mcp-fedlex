@@ -22,8 +22,8 @@
 ### 1.1 Soll: 47 Lexikon-IDs
 
 Quelle: Markdown-Header `### <ID> · <funktionsname>` in
-- `docs/10_LEXICON_jolux.md` (27 IDs)
-- `docs/11_LEXICON_akn.md` (20 IDs)
+- `docs/dev/10_LEXICON_jolux.md` (27 IDs)
+- `docs/dev/11_LEXICON_akn.md` (20 IDs)
 
 Extraktions-Regex (in Rust gegen den eingelesenen Dateiinhalt):
 ```
@@ -263,7 +263,7 @@ const COMPOSITE_TOOLS: &[&str] = &["compare_versions"];
 
 
 1. **Lexikon ↔ Matrix deckungsgleich.**
-   Lies beide Lexikon-Dateien (`env!("CARGO_MANIFEST_DIR")` + `"/../../docs/10_LEXICON_jolux.md"`
+   Lies beide Lexikon-Dateien (`env!("CARGO_MANIFEST_DIR")` + `"/../../docs/dev/10_LEXICON_jolux.md"`
    bzw. `…/11_LEXICON_akn.md`), extrahiere alle IDs via Regex (§1.1).
    - Jede Lexikon-ID **muss** in `MATRIX` vorkommen → sonst „neues Primitiv ohne Zuordnung"
      (das ist der G-4-Schutz; diese Assertion wird rot bei neuem Lexikon-Eintrag).
@@ -312,17 +312,17 @@ const COMPOSITE_TOOLS: &[&str] = &["compare_versions"];
 
 ## 4. Doku-Updates (nach grünem Test)
 
-1. **`docs/adr/ADR-007-jolux-metadata-tools-pool-and-quota.md`**, Z. 108–110:
+1. **`docs/dev/adr/ADR-007-jolux-metadata-tools-pool-and-quota.md`**, Z. 108–110:
    `- [ ] **Vollständigkeits-Matrix.**` → `- [x]` und ergänzen:
    „Verankert in `crates/mcp-reader/tests/lexicon_projection.rs` (Offline, läuft in `cargo test`);
    47 IDs, 21 projiziert / 26 begründet ausgeschlossen, + 1 Composite-Tool
    (`compare_versions`) ⇒ 22 registrierte MCP-Tools."
 
-2. **`docs/50_ROADMAP_TO_PERFECT.md`**, Schritt 3 (Vollständigkeits-Matrix): als erledigt
+2. **`docs/dev/50_ROADMAP_TO_PERFECT.md`**, Schritt 3 (Vollständigkeits-Matrix): als erledigt
    markieren, mit Verweis auf die Testdatei. (Den genauen Wortlaut/Checkbox-Stil dort vor dem
    Editieren kurz gegenlesen — Datei war in dieser Session nicht im Detail geöffnet.)
 
-3. **`docs/45_GAP_ANALYSIS.md`**, G-4: Status auf „geschlossen" setzen, Verweis auf die Testdatei.
+3. **`docs/dev/45_GAP_ANALYSIS.md`**, G-4: Status auf „geschlossen" setzen, Verweis auf die Testdatei.
    Optional G-2 ergänzen: „die fünf AKN-Aufbereitungs-Primitive sind nun **explizit** als
    `Excluded` in der Matrix verbucht (Nutzwert-Lücke, bewusst zurückgestellt)."
 

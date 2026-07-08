@@ -1,6 +1,6 @@
 //! # Lexikon-Konformanz-Suite (Test-Ort)
 //!
-//! Prüft **jeden Eintrag** aus `docs/10_LEXICON_jolux.md` live gegen den
+//! Prüft **jeden Eintrag** aus `docs/dev/10_LEXICON_jolux.md` live gegen den
 //! Fedlex-SPARQL-Endpoint. Ein Test pro Lexikon-ID (`JLX-<DOM>-<NN>`), plus
 //! Audit-Tests für die explizit ausgeschlossenen Phantom-Prädikate.
 //!

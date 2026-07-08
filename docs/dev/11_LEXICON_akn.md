@@ -11,8 +11,8 @@
 >
 > **Quellen (Ground Truth).**
 > - Empirisches Rulebook X0–X20: `fedlex-RAG-evaluation/data_understanding/xml_akn/rulebook_xml_akn.md`
-> - Implementierungs-Spec: `../../analyse-fedlex/11_DATA_RULES_akn.md`
-> - PoC-Tools 13–17: `../../analyse-fedlex/30_TOOL_CATALOG.md` (`akn_tools.py`, `akn_middleware.py`)
+> - Implementierungs-Spec: `../../../analyse-fedlex/11_DATA_RULES_akn.md`
+> - PoC-Tools 13–17: `../../../analyse-fedlex/30_TOOL_CATALOG.md` (`akn_tools.py`, `akn_middleware.py`)
 > - Referenz-Implementierung: `crates/fedlex-akn` (alle 20 Primitive, Konformanz-Suite grün)
 >
 > **Pendant.** Der JOLux-Funktionsraum (Metadaten/Graph) steht in `10_LEXICON_jolux.md`. AKN liefert den **Text**, JOLux die **Metadaten** (X0.3). Die Brücke ist die FRBR-Manifestation-URL (JLX-RES-04 → AKN-DOC-01).

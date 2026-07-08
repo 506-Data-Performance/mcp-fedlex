@@ -14,7 +14,7 @@
 //! [`crate::impacts`]: eine «from»-freie Hauptquery löst den Stichtag zur
 //! Fassung auf, kurze Zweitqueries binden die Zitations-URIs **exakt**
 //! (indexgestützt, < 0,5 s) und bleiben unter der WAF-Schwelle
-//! ([Betriebsregel WAF](../docs/10_LEXICON_jolux.md)).
+//! ([Betriebsregel WAF](../docs/dev/10_LEXICON_jolux.md)).
 
 use crate::client::{PREFIXES, SparqlClient, val};
 use crate::{eli_uri, error::JoluxError};
@@ -59,7 +59,7 @@ const CIT_VERSION_Q: &str = r#"SELECT ?sub WHERE {
   FILTER(?date <= xsd:date("__DATE__"))
 } ORDER BY DESC(?date) LIMIT 1"#;
 // xsd:date(…)-Konstruktor, nie "…"^^xsd:date-Literal (Betriebsregel
-// Datumsvergleich, docs/10_LEXICON_jolux.md).
+// Datumsvergleich, docs/dev/10_LEXICON_jolux.md).
 
 /// Kurze Zweitquery (Prädikat mit «From» — muss unter der WAF-Schwelle
 /// bleiben): ausgehende Zitationen der aufgelösten Fassung, exakt gebunden.

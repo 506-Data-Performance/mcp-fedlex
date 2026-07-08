@@ -78,7 +78,7 @@ Offene **interne** Roadmap-Punkte (aus 50_ROADMAP, unverändert gültig):
 - [x] **A-3 (U-1): README-Quickstart** — *Was/Warum*, *Tool-Liste (22, nach Pool)*, *In 2 Minuten
       lokal* (`docker compose up` + `curl` für `initialize`/`tools/list`/`tools/call`), *MCP-Client-
       Anbindung*, *Health-Endpunkte*, *Verweis auf CONFIG/AUTH*, *Lizenz/Links*.
-- [x] **A-4 (U-3): `docs/70_CONFIG.md`** — Referenztabelle jeder Env-Variable (Name, Default,
+- [x] **A-4 (U-3): `docs/dev/70_CONFIG.md`** — Referenztabelle jeder Env-Variable (Name, Default,
       Pflicht, Beispiel, Wirkung) inkl. Auth-Auswahlreihenfolge und Redis-mTLS-Trias.
 
 
@@ -92,7 +92,7 @@ Offene **interne** Roadmap-Punkte (aus 50_ROADMAP, unverändert gültig):
       `/livez`, `/readyz`, `POST /rpc initialize` (serverInfo) und `tools/call read_article`
       (Provenance); **failt mit Exit≠0 bei 503/HTML statt JSON** (genau der 503-Vorfall vom
       18.06.). Exit-Codes 0/1/2, farbige Ausgabe.
-- [x] **B-2 (U-7): `docs/80_DEPLOY.md`** — k8s-Pfad end-to-end (Topologie, SealedSecret-Tabelle,
+- [x] **B-2 (U-7): `docs/dev/80_DEPLOY.md`** — k8s-Pfad end-to-end (Topologie, SealedSecret-Tabelle,
       `gen-redis-mtls.sh`, Reihenfolge Secrets-vor-Workloads, Pod-Rollout nach Secret-Änderung,
       Smoke-Test) **plus §6 Runbook für den 503-Vorfall** mit Diagnose-Kommandos und Merksatz
       „distroless ⇒ kein exec, immer Port-Forward/Ingress".
@@ -120,7 +120,7 @@ Offene **interne** Roadmap-Punkte (aus 50_ROADMAP, unverändert gültig):
       `config.yml` mit vertraulichem Security-Link) + `.github/PULL_REQUEST_TEMPLATE.md`. Alle vier
       tragen die ADR-Leitplanken (Identität/Provenance/PII/Least-Privilege) und den CI-Gleichlauf
       aus `CONTRIBUTING.md` als Checklisten. *(2026-06-21)*
-- [x] **C-5 (U-6): `docs/90_AUTH_AND_ROLES.md`** — Rollenmodell (Reader ⊆ Navigator ⊆ Validator),
+- [x] **C-5 (U-6): `docs/dev/90_AUTH_AND_ROLES.md`** — Rollenmodell (Reader ⊆ Navigator ⊆ Validator),
       Pool-Sichtbarkeitsmatrix, JWT-Claims-Schema (iss/aud/role/tenant/sid), Quota pro Rolle,
       Auth-Auswahlreihenfolge (JWKS/HS256/RS256/Dev-Token), Audit-Log-Beispiel.
 - [x] **C-6 (U-8): Veröffentlichungs-Pfad** — Hybrid: dynamische `latest`/`<sha>`-Tags für den

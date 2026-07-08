@@ -258,8 +258,8 @@ Die Site ist in **gutem Zustand**: Der fachliche Content ist stark und aktuell, 
 ### WF-19 — Tote Datei-Referenzen im öffentlichen Content
 - **Status:** 🟢 erledigt (2026-07-02, `30b18b4`)
 - **Beleg:** `werkzeuge.md:11,19` nennt `10_LEXICON_jolux.md`, `11_LEXICON_akn.md`,
-  `lexicon_projection.rs`; `schnellstart.md:65` nennt `docs/90_AUTH_AND_ROLES.md`,
-  `docs/80_DEPLOY.md` — alles als Backtick-Text ohne Link.
+  `lexicon_projection.rs`; `schnellstart.md:65` nennt `docs/dev/90_AUTH_AND_ROLES.md`,
+  `docs/dev/80_DEPLOY.md` — alles als Backtick-Text ohne Link.
 - **Wirkung:** Website-Besucher können den zentralen Vertrauensanker („jede Reservierung
   begründet, CI-abgesichert") nicht nachprüfen — dabei liegen die Dateien öffentlich auf
   GitHub.
@@ -270,7 +270,7 @@ Die Site ist in **gutem Zustand**: Der fachliche Content ist stark und aktuell, 
 - **Status:** 🟢 erledigt (2026-07-02, `d124cee`)
 - **Beleg:** `schnellstart.md:59` „alternativ eröffnet `GET /sse` einen SSE-Strom" —
   Server-Doku stuft SSE als Alt-Transport ohne Erhaltungsziel ein
-  (`mcp-fedlex/docs/55_MIGRATION_mcp_protocol_upgrade.md` §0); Empfehlung ist Streamable
+  (`mcp-fedlex/docs/dev/55_MIGRATION_mcp_protocol_upgrade.md` §0); Empfehlung ist Streamable
   HTTP `POST /mcp`.
 - **Wirkung:** Neue Integratoren könnten auf den Transport bauen, der als erstes fallen wird.
 - **Behandlung:** `/mcp` als den Weg formulieren, `/sse` (und `/rpc`) als Legacy für

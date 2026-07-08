@@ -1,7 +1,7 @@
 //! # Protokoll-Baseline (Sicherheitsnetz VOR dem MCP-Upgrade)
 //!
 //! Phase 1 des Migrations-Runbooks
-//! ([`docs/55_MIGRATION_mcp_protocol_upgrade.md`](../../../docs/55_MIGRATION_mcp_protocol_upgrade.md),
+//! ([`docs/dev/55_MIGRATION_mcp_protocol_upgrade.md`](../../../docs/dev/55_MIGRATION_mcp_protocol_upgrade.md),
 //! Schritte 1.1 + 1.2). Dieser Offline-Test **friert den heutigen Konsumenten-
 //! Vertrag ein**, bevor irgendeine Verhaltensänderung beginnt. Er wird **rot**,
 //! sobald sich der `initialize`-Handshake, die Antwortform von `tools/list`/

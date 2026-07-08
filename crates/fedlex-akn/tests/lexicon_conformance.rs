@@ -1,4 +1,4 @@
-//! E2E-Konformanz-Suite des AKN-Lexikons (`docs/11_LEXICON_akn.md`).
+//! E2E-Konformanz-Suite des AKN-Lexikons (`docs/dev/11_LEXICON_akn.md`).
 //!
 //! Läuft gegen das **echte** Fedlex (SPARQL für die Manifestation-URL,
 //! dann XML-Download) und prüft jedes Primitiv gegen die im Lexikon

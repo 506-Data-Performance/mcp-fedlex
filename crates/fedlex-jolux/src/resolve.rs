@@ -174,7 +174,7 @@ const MANIF_Q: &str = r#"SELECT ?date ?url WHERE {
   FILTER(?date <= xsd:date("__DATE__"))
 } ORDER BY DESC(?date) LIMIT 1"#;
 // xsd:date(…)-Konstruktor, nie "…"^^xsd:date-Literal (Betriebsregel
-// Datumsvergleich, docs/10_LEXICON_jolux.md).
+// Datumsvergleich, docs/dev/10_LEXICON_jolux.md).
 
 /// JLX-RES-04: Liefert die Download-URL der zum Stichtag gültigen Fassung
 /// im gewünschten Format.

@@ -41,7 +41,7 @@ Diese Invarianten sind in ADRs festgehalten und durch Tests abgesichert — Beit
 sie nicht verletzen:
 
 - **Identität nie aus LLM-Parametern** (ADR-002): `tenant`/`session`/`role` nur aus
-  geprüften Claims. Siehe `docs/90_AUTH_AND_ROLES.md`.
+  geprüften Claims. Siehe `docs/dev/90_AUTH_AND_ROLES.md`.
 - **Provenance an jeder Antwort** (ADR-004): Normtext-Antworten tragen `eli` + `valid_as_of`.
 - **PII-Scrubbing im Audit-Log** (ADR-001): keine rohen Tool-Argumente/Antwortinhalte loggen.
 - **Least-Privilege-Pools** (ADR-006/007): neue Tools brauchen einen `ToolPool` und einen
@@ -59,8 +59,8 @@ sie nicht verletzen:
 
 - Code: `crates/` (Reader, Store, Bridge, AKN/JOLux, Telemetry).
 - Architektur: `likec4/` und `docs/` (`10_LEXICON`, `30_PLAN`, `45_GAP_ANALYSIS`,
-  `50_ROADMAP_TO_PERFECT`, ADRs unter `docs/adr/`).
-- Betrieb: `docs/70_CONFIG.md`, `docs/80_DEPLOY.md`, `docs/90_AUTH_AND_ROLES.md`.
+  `50_ROADMAP_TO_PERFECT`, ADRs unter `docs/dev/adr/`).
+- Betrieb: `docs/dev/70_CONFIG.md`, `docs/dev/80_DEPLOY.md`, `docs/dev/90_AUTH_AND_ROLES.md`.
 
 ## Sicherheit
 

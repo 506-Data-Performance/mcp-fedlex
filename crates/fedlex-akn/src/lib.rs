@@ -1,6 +1,6 @@
 //! # fedlex-akn — AKN-4.0-Lexikon als Funktionen
 //!
-//! Implementiert die 20 Primitive aus `docs/11_LEXICON_akn.md`. Jede
+//! Implementiert die 20 Primitive aus `docs/dev/11_LEXICON_akn.md`. Jede
 //! Funktion kapselt empirisch verifizierte Corpus-Regeln (Rulebook
 //! `11_DATA_RULES_akn.md`, X0-X20) — Aufrufer brauchen kein AKN-Wissen.
 //!

@@ -107,8 +107,8 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   Prod mit dem nächsten Deploy.
 - **Entdeckt:** 2026-07-03, beim Prod-Smoke der Agent-UX-Welle (`kubectl logs` der frisch
   ausgerollten Reader-Pods, Digest `1703721…`).
-- **Beleg:** [`crates/mcp-reader/src/main.rs:250`](../crates/mcp-reader/src/main.rs#L250) und
-  [`:255`](../crates/mcp-reader/src/main.rs#L255) loggen das strukturierte Feld `redis_url` auf
+- **Beleg:** [`crates/mcp-reader/src/main.rs:250`](../../crates/mcp-reader/src/main.rs#L250) und
+  [`:255`](../../crates/mcp-reader/src/main.rs#L255) loggen das strukturierte Feld `redis_url` auf
   INFO. `REDIS_URL` kommt in Prod aus dem SealedSecret `mcp-reader-redis-auth` in der Form
   `rediss://default:<passwort>@mcp-reader-redis:6379` — das **Passwort steht damit im Klartext**
   in stdout. Verifiziert an der laufenden Instanz: `mcp_reader: Quota-Redis über mTLS verbunden
@@ -129,7 +129,7 @@ Ein Eintrag ist erst vollständig, wenn er **Beleg** (Datei/Zeile oder Befehl), 
   Logzeile auf Abwesenheit des `:<pw>@`-Musters prüft. Klein und risikoarm, zieht aber einen
   Rebuild + Redeploy nach sich → als Härtungs-Punkt einplanbar
   ([67](67_HARDENING_AND_SOTA_ROADMAP.md)). **Sicherheitsfund** — gemäss
-  [CLAUDE.md](../CLAUDE.md) nicht als öffentliches Issue führen (GitHub ist öffentlicher
+  [CLAUDE.md](../../CLAUDE.md) nicht als öffentliches Issue führen (GitHub ist öffentlicher
   Mirror); Behandlung hier + ggf. `SECURITY.md`, nicht im Bugtracker.
 
 ### RF-6 — Externe Review-Welle 2026-07-03 (Agent-Test aller drei Dienste)
@@ -142,29 +142,29 @@ Reader + semantic + skills. Die Einzelbefunde mit Behandlung:
   UNION zweier Scans. Behandlung: Zwei-Query-Muster wie JLX-IMP-01 («from»-freie
   Stichtags-Auflösung + kurze exakt gebundene Zweitqueries, < 0,5 s live), Dedup nach
   Quellgesetz (J7.4), Wächter `waf_guard_citation_queries`.
-  [`citations.rs`](../crates/fedlex-jolux/src/citations.rs).
+  [`citations.rs`](../../crates/fedlex-jolux/src/citations.rs).
 - **Zukunfts-Stichtag ungeprüft in Provenance** (MITTEL) — **🟢 behoben.**
   `read_article(as_of=2035-01-01)` stempelte `valid_as_of: 2035-01-01`, ohne die real
   aufgelöste Fassung auszuweisen. Behandlung: optionales Provenance-Feld
   `date_applicability` (additiv, ADR-004-kompatibel), gesetzt von
   `resolve_consolidation_at` und in allen AKN-Tools nachgetragen. Künftige Stichtage
   bleiben bewusst zulässig (Fedlex führt beschlossene künftige Fassungen) — jetzt aber
-  sichtbar ehrlich. [`provenance.rs`](../crates/fedlex-core/src/provenance.rs),
-  [`tools.rs`](../crates/mcp-reader/src/tools.rs).
+  sichtbar ehrlich. [`provenance.rs`](../../crates/fedlex-core/src/provenance.rs),
+  [`tools.rs`](../../crates/mcp-reader/src/tools.rs).
 - **check_in_force widerspricht sich** (MITTEL) — **🟢 behoben.** `in_force: false`
   (Stichtag) neben `status_label: "In Kraft"` (heutiges Vokabular) unversöhnt.
   Behandlung: Felder umbenannt zu `current_status_uri`/`current_status_label` (serde-Alias
   für Alt-Payloads), Zeitbezug in Rustdoc + Tool-Beschreibung explizit.
-  [`temporal.rs`](../crates/fedlex-jolux/src/temporal.rs).
+  [`temporal.rs`](../../crates/fedlex-jolux/src/temporal.rs).
 - **resolve_sr_number("235.1") findet nur das aufgehobene DSG** (MITTEL) — **🟢 behoben.**
   Das geltende nDSG (`eli/cc/2022/491`) trägt kein `historicalLegalId` mehr; die SR-Nummer
   lebt nur noch als `skos:notation` (typisiert `notation-type/id-systematique`) der
   Systematik-Taxonomie. Behandlung: UNION-Pfad über die Taxonomie + Sortierung
   „geltendes Recht zuerst". Live verifiziert: 235.1 → altes DSG **und** nDSG.
-  [`resolve.rs`](../crates/fedlex-jolux/src/resolve.rs).
+  [`resolve.rs`](../../crates/fedlex-jolux/src/resolve.rs).
 - **Batch-Request → kryptischer Parse-Error** (NIEDRIG) — **🟢 behoben.** Array-Body meldet
   jetzt klar „JSON-RPC batching is not supported (removed in MCP 2025-06-18)…" statt des
-  rohen serde-Fehlers. [`transport.rs`](../crates/mcp-reader/src/transport.rs).
+  rohen serde-Fehlers. [`transport.rs`](../../crates/mcp-reader/src/transport.rs).
 - **Lifecycle nicht erzwungen** (`tools/list` vor `initialize` funktioniert) — **⚪ bewusst
   verworfen.** Der Reader ist zustandslos (CQRS-Leseseite, keine `Mcp-Session-Id`);
   Handshake-Zwang brächte Session-Zustand ohne Sicherheitsgewinn (Auth gilt pro Request).

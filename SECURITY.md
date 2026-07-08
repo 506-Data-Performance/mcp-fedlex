@@ -32,7 +32,7 @@ Besonders relevant:
 - **fail-closed** überall: ohne gültiges Credential bzw. bei Quota-Redis-Ausfall wird
   verweigert, nicht geöffnet.
 - **Identität nie aus LLM-Parametern** (ADR-002): `tenant`/`session`/`role` stammen nur
-  aus geprüften Claims. Details: [`docs/90_AUTH_AND_ROLES.md`](./docs/90_AUTH_AND_ROLES.md).
+  aus geprüften Claims. Details: [`docs/dev/90_AUTH_AND_ROLES.md`](./docs/dev/90_AUTH_AND_ROLES.md).
 - **PII-Scrubbing** im Audit-Log (ADR-001): Allowlist statt Blocklist.
 - **Distroless-Image**, Least-Privilege-Pools, Default-Deny-NetworkPolicy.
 
@@ -41,6 +41,6 @@ Besonders relevant:
 - Niemals echte Tokens/Schlüssel committen. `.env` ist `.gitignore`d; nur
   `.env.example` mit Platzhaltern gehört ins Repo.
 - Produktive Secrets liegen als **SealedSecrets** im Infra-Repo (entschlüsselbar nur durch
-  den Cluster-Controller). Rotation: [`docs/80_DEPLOY.md`](./docs/80_DEPLOY.md §2).
+  den Cluster-Controller). Rotation: [`docs/dev/80_DEPLOY.md`](./docs/dev/80_DEPLOY.md §2).
 - Solltest du versehentlich ein Geheimnis veröffentlicht haben: sofort rotieren und uns
   unter security@mindful.bio informieren.
