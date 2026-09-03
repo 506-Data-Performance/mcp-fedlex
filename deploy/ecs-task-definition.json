@@ -1,0 +1,62 @@
+{
+  "family": "swiss-legal",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::865330431087:role/ECSTaskRole",
+  "taskRoleArn": "arn:aws:iam::865330431087:role/ECSTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "mcp-fedlex-reader",
+      "image": "865330431087.dkr.ecr.eu-central-1.amazonaws.com/506data/mcp-fedlex:__TAG__",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp",
+          "name": "reader-8080-tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        { "name": "BIND_ADDR", "value": "0.0.0.0:8080" },
+        { "name": "REDIS_URL", "value": "redis://127.0.0.1:6379" },
+        { "name": "MCP_LOG_FORMAT", "value": "json" },
+        { "name": "MCP_JWT_ISSUER", "value": "https://506.ai/swiss-legal" },
+        { "name": "MCP_JWT_AUDIENCE", "value": "mcp-fedlex" }
+      ],
+      "secrets": [
+        {
+          "name": "MCP_JWT_HS256_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:eu-central-1:865330431087:secret:SWISS_LEGAL_HS256_SECRET-G6lc2l"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/swiss-legal",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "reader",
+          "awslogs-create-group": "true"
+        }
+      }
+    },
+    {
+      "name": "redis",
+      "image": "redis:7-alpine",
+      "essential": true,
+      "command": ["redis-server", "--save", "", "--appendonly", "no"],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/swiss-legal",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "redis",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

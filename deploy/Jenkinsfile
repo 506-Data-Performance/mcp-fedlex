@@ -1,0 +1,106 @@
+// Swiss-Legal (mcp-fedlex) — Build & Deploy nach ECS Fargate.
+//
+// EINE Umgebung fuer die ganze Flotte (Mandanten-Trennung macht der Server
+// selbst per JWT-tenant). Muster: artemis/jenkins/Jenkinsfile — inklusive
+// des Circuit-Breaker-Nachweises am Ende. AWS-Seite: deploy/README.md.
+//
+// WICHTIG: Dieses Repo ist ein FORK von mindful-bio/mcp-fedlex. Upstream-
+// Updates kommen per GitHub "Sync fork" + Diff-Review herein; gebaut wird
+// ausschliesslich der Stand DIESES Forks — kein ungeprueftes Upstream-HEAD.
+pipeline {
+    agent any
+    environment {
+        IMAGE = '506data/mcp-fedlex'
+        ECS_CLUSTER = 'companygpt-cluster'
+        ECS_SERVICE = 'swiss-legal'
+        AWS_REGION = 'eu-central-1'
+        DOCKER_BUILDKIT = '1'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Initialize') {
+            steps {
+                // Tag = <version aus Cargo.toml>-<Jenkins-Build-Nummer>, z.B.
+                // 0.2.0-7. Unveraenderlich (ECR IMMUTABLE): jeder Build bekommt
+                // seinen eigenen Tag, Rollback = alte Task-Revision.
+                script {
+                    def version = sh(
+                        script: "grep -m1 '^version' Cargo.toml | cut -d'\"' -f2",
+                        returnStdout: true
+                    ).trim()
+                    if (!version) { version = '0.0.0' }
+                    env.TAG = "${version}-${env.BUILD_NUMBER}"
+                }
+                echo "Swiss-Legal ${env.TAG}"
+            }
+        }
+        stage('Login to AWS ECR') {
+            steps {
+                sh 'aws ecr get-login-password --region $AWS_REGION | docker login --username $AWS_ECR_USERNAME --password-stdin $AWS_ECR_REPO_URI'
+            }
+        }
+        stage('Build Image') {
+            steps {
+                // Upstream-Dockerfile im Repo-Root (Rust multi-stage, distroless).
+                // Erster Build ~10-15 min, danach traegt der Layer-Cache.
+                sh 'docker build -t $IMAGE:$TAG -f Dockerfile .'
+            }
+        }
+        stage('Push to ECR') {
+            steps {
+                sh 'docker tag $IMAGE:$TAG $AWS_ECR_REPO_URI/$IMAGE:$TAG'
+                sh 'docker push $AWS_ECR_REPO_URI/$IMAGE:$TAG'
+            }
+        }
+        stage('Deploy to ECS') {
+            steps {
+                // Task-Definition aus dem Repo, Platzhalter -> Build-Tag; jede
+                // Revision zeigt damit auf genau ein Image (sonst waere der
+                // Circuit-Breaker wirkungslos — siehe artemis-Jenkinsfile).
+                sh '''
+                    sed "s|__TAG__|${TAG}|g" deploy/ecs-task-definition.json > taskdef-rendered.json
+                    aws ecs register-task-definition \
+                        --cli-input-json file://taskdef-rendered.json \
+                        --region ${AWS_REGION} \
+                        --query 'taskDefinition.taskDefinitionArn' --output text > taskdef-arn.txt
+                    cat taskdef-arn.txt
+                '''
+                script {
+                    env.TASKDEF_ARN = readFile('taskdef-arn.txt').trim()
+                }
+                sh '''
+                    aws ecs update-service \
+                        --cluster ${ECS_CLUSTER} --service ${ECS_SERVICE} \
+                        --task-definition ${TASKDEF_ARN} --region ${AWS_REGION} \
+                        --query 'service.deployments[0].id' --output text
+                '''
+                // wait allein kann Erfolg und Circuit-Breaker-Rollback nicht
+                // unterscheiden — deshalb danach nachsehen, was wirklich laeuft.
+                sh "aws ecs wait services-stable --cluster ${ECS_CLUSTER} --services ${ECS_SERVICE} --region ${AWS_REGION}"
+                sh '''
+                    LIVE=$(aws ecs describe-services \
+                        --cluster ${ECS_CLUSTER} --services ${ECS_SERVICE} --region ${AWS_REGION} \
+                        --query 'services[0].taskDefinition' --output text)
+                    if [ "$LIVE" != "${TASKDEF_ARN}" ]; then
+                        echo "FEHLER: ECS laeuft auf ${LIVE}, erwartet war ${TASKDEF_ARN}." >&2
+                        echo "Vermutlich Circuit-Breaker-Rollback — Logs: /ecs/swiss-legal" >&2
+                        exit 1
+                    fi
+                    echo "Live: ${LIVE}"
+                '''
+            }
+        }
+    }
+    post {
+        success {
+            sh """curl -X POST -H "Content-type: application/json" --data '{"text": "Swiss-Legal ${TAG} successfully deployed!"}' ${SLACK_WEBHOOK_ID}"""
+        }
+        failure {
+            sh """curl -X POST -H "Content-type: application/json" --data '{"text": "Deployment of Swiss-Legal ${TAG} has failed!"}' ${SLACK_WEBHOOK_ID}"""
+        }
+    }
+}
